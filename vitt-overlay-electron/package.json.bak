@@ -1,0 +1,15 @@
+{
+  "name": "vitt-overlay-ui",
+  "version": "0.2.1",
+  "productName": "VITT Overlay",
+  "description": "Transparent overlay with Live Assist panel and toolbar",
+  "appId": "ai.vitt.overlay",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^30.0.0"
+  }
+}

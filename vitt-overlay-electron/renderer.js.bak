@@ -1,0 +1,8 @@
+window.addEventListener('DOMContentLoaded', () => {
+  // const stateEl = document.getElementById('state');
+  // if (window.overlay && window.overlay.onClickThrough) {
+  //   window.overlay.onClickThrough((isOn) => {
+  //     stateEl.textContent = isOn ? 'ON' : 'OFF';
+  //   });
+  // }
+});

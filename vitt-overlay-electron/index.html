@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>VITT Overlay</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="card-header drag-region">
+      <div class="title">
+        <span class="dot"></span>
+        <span>Jarvis Live</span>
+      </div>
+      <div class="header-actions no-drag">
+        <button class="icon-btn" title="Mute / Unmute"><span>🔔</span></button>
+        <button class="icon-btn" title="Pause"><span>⏸️</span></button>
+      </div>
+    </div>
+
+    <div class="list">
+      <div class="item">
+        <div class="left i-green">★</div>
+        <div class="text">Highlight <b>20% faster integration</b> vs competitor.</div>
+      </div>
+      <div class="item">
+        <div class="left i-indigo">💡</div>
+        <div class="text">Suggest showing demo slide.</div>
+      </div>
+      <div class="item">
+        <div class="left i-yellow">⏰</div>
+        <div class="text">Remind to discuss pricing options.</div>
+      </div>
+      <div class="item">
+        <div class="left i-red">⚠️</div>
+        <div class="text">Ask about decision timeline.</div>
+      </div>
+      <div class="item">
+        <div class="left i-teal">🔗</div>
+        <div class="text">Link fast onboarding → faster RSOI.</div>
+      </div>
+      <div class="item">
+        <div class="left i-gray">📄</div>
+        <div class="text">Security Whitepaper.pdf</div>
+      </div>
+    </div>
+
+    <div class="footer no-drag">
+      <button class="tool">
+        <div class="t-ic">📝</div>
+        <div class="t-txt">Transcript</div>
+      </button>
+      <button class="tool">
+        <div class="t-ic">🤖</div>
+        <div class="t-txt">Chat with AI</div>
+      </button>
+      <button class="tool">
+        <div class="t-ic">📊</div>
+        <div class="t-txt">Summary</div>
+      </button>
+      <button class="tool">
+        <div class="t-ic">⚙️</div>
+        <div class="t-txt">Settings</div>
+      </button>
+    </div>
+
+    <div class="state no-drag">Click-through: <b id="state">ON</b> • Toggle with <span class="kbd">⌥ + `</span></div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
