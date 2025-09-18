@@ -2,7 +2,9 @@
 # Vitt Overlay 
 ![Logo](https://drive.google.com/file/d/1WeHe4b6xk6udT4hPBBF-2CJe4X0eYlKv/view?usp=drive_link)
 
-![Logo](/project-screenshots/vitt-logo.png)
+![Logo](/project-screenshots/vitt-logo.png/)
+
+<img src="/project-screenshots/vitt-logo.png" width="48" height="48">
 
 This Project is Develop for Vitt Ai which can extract realtime audio from Teams & Zoom & show transcriptions on basis of it
 
