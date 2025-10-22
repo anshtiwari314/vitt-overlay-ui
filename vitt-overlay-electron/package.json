@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Run on macOS: ```bash npm install npm run start ``` Hotkeys: - Toggle click-through: **⌥ + `** - Hide/Show: **⌥ ⇧ H** - Reload: **⌥ ⇧ R**",
   "main": "main.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
@@ -12,6 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@recallai/desktop-sdk": "^1.2.0",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
     "electron": "^38.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

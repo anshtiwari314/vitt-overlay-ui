@@ -1,14 +1,15 @@
-/* body{
-   -webkit-app-region: drag;
+body{
+   /* -webkit-app-region: drag;
    background-color: black;
    border:0.1rem solid red;
    color:white;
-   z-index:5;
-   /* height:80vh; 
+   z-index:5; */
+   /* height:80vh;*/
+    background-color: transparent;
 }
 button, a, input {
-  -webkit-app-region: no-drag;
-} */
+  /* -webkit-app-region: no-drag; */
+}
 
 
 ::-webkit-scrollbar {
@@ -33,7 +34,7 @@ button, a, input {
 
 html, 
 body { 
-  background: black; 
+  /* background: black;  */
   margin: 0; 
   font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   /* -webkit-app-region: drag; */
