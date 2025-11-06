@@ -27,7 +27,7 @@ function TranscriptionList({e}){
 function App() {
     
   const recallElectronAPI = window.electronAPI.ipcRenderer;
-  const wsUrl = 'wss://b974ed4543d5.ngrok-free.app'
+  const wsUrl = 'ws://34.100.145.102/ws'
   
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
@@ -47,7 +47,7 @@ function App() {
     console.log("Setting up IPC listeners...");
 
     recallElectronAPI.on("state", (newState) => {
-      console.log("=== State received from SDK:", newState);
+      //console.log("=== State received from SDK:", newState);
       setSdkState(newState);
     });
 
