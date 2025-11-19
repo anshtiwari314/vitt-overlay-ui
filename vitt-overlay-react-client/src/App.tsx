@@ -1,9 +1,13 @@
-import React,{ useEffect, useState } from 'react'
+import React,{ useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
+import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
+
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+
 import {
   CheckCircle2,
   AlertCircle,
@@ -13,6 +17,33 @@ import {
   Key,
   RefreshCw
 } from 'lucide-react';
+
+import {
+  faSearch,
+  //faMicrophone,
+  faMicrophoneSlash,
+  faPlusCircle,
+  faTimesCircle,
+  faRecordVinyl,
+  faMicrophoneAlt,
+  faMicrophoneAltSlash,
+  faWonSign,
+  faShare,
+  faTimes,
+  faBars,
+  faMicrophone
+} from "@fortawesome/free-solid-svg-icons";
+// import {} from "@fortawesome/free-regular-svg-icons";
+import LoadingIcons, { 
+  Audio, BallTriangle, Bars, Circles, Grid, Hearts, Oval, 
+  Puff, Rings, SpinningCircles, TailSpin, ThreeDots 
+} from 'react-loading-icons';
+
+//import FileLoadChecker from '../components/FileLoader'
+import { useVad } from "./context/VadWrapper";
+import { EntypoMic,EntypoModernMic} from "react-entypo";
+
+
 
 function TranscriptionList({e}){
 
@@ -26,9 +57,10 @@ function TranscriptionList({e}){
 }
 function App() {
     
-  const recallElectronAPI = window.electronAPI.ipcRenderer;
-  const wsUrl = 'ws://34.100.145.102/ws'
-  
+  const recallElectronAPI = window.electronAPI?.ipcRenderer;
+  //const wsUrl = 'ws://34.100.145.102/ws'
+  const wsUrl = 'wss://b03bfc036d13.ngrok-free.app'
+
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
     bot_id: null,
@@ -42,8 +74,14 @@ function App() {
   const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
   const dispatch = useDispatch()
 
-  
+  const {manualVadStatus,setManualVadStatus,vadRecordingOn,
+    setVadRecordingOn,vadStatus,setVadStatus,vadInstance,VAD2,userSpeaking} = useVad()
+
+  const wasClosedByUserRef = useRef(false);
+
   React.useEffect(() => {
+    if(!recallElectronAPI)
+      return ;
     console.log("Setting up IPC listeners...");
 
     recallElectronAPI.on("state", (newState) => {
@@ -113,6 +151,8 @@ function App() {
   },[ws])
 
   useEffect(()=>{
+    if(!recallElectronAPI)
+      return ;
     console.log('overlay object in electron',window.overlay)
     window.overlay.somethingHappened((data)=>{
      
@@ -120,6 +160,7 @@ function App() {
     })
   },[])
 
+  console.log('VAD2', VAD2)
   return (
     <div>
       <div className="card" id="card">
@@ -133,6 +174,26 @@ function App() {
             <button className="icon-btn" title="Pause"><span>⏸️</span></button>
           </div>
         </div>
+
+         {
+          !VAD2.loading ? 
+         <CustomFillButtonWithIcon 
+          color="#8236f5" 
+          text="" 
+          icon={faMicrophoneAlt}
+          style={{
+            backgroundColor: manualVadStatus ? 'red' : 'gray'
+          }}
+          //className={wasClosedByUserRef.current?"":"hidden"}
+          iconComp={<FontAwesomeIcon icon={faMicrophoneAlt} style={{ fontSize: '2rem' }} />} 
+          onClick={() => setManualVadStatus((p) => !p)}
+        />
+        
+        : 
+        <div style={{}}>
+            <TailSpin stroke="red"  strokeOpacity={1} speed={.95} style={{margin:'2rem'}}/>
+        </div>
+        }
 
       <section className="control-panel">
           {
