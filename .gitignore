@@ -4,4 +4,4 @@ dist/
 dist-mac/
 dist/*
 dist-mac/*
-
+build/
