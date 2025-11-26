@@ -102,10 +102,10 @@ async function createDesktopSdkUpload() {
     //     },
     realtime_endpoints: [
     {
-      type: "desktop_sdk_callback",
-      //type: "websocket",
+      //type: "desktop_sdk_callback",
+      type: "websocket",
       //url:'ws://34.100.145.102/ws',
-      //url:'wss://b03bfc036d13.ngrok-free.app',
+      url:'wss://1d17113a67b3.ngrok-free.app',
       events: ["audio_mixed_raw.data"]
       //events: ["audio_participant_raw.data"]
     },

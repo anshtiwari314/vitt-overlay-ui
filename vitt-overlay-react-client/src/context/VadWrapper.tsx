@@ -2,7 +2,7 @@ import React, {createContext, useContext,useEffect,useState,useRef } from 'react
 import { startMediaRecorder,startMediaRecorder2 } from '../functions/mediaRecorder';
 import { getTimeStamp,getOldTimeStamp,generateBase64 } from '../functions/generalFn';
 import WavToMp3 from '../functions/wavToMp3';
-//import { useData } from './DataWrapper';
+import { useData } from './DataWrapper';
 //import { useAuth } from './AuthContext';
 import { useMicVAD} from "@ricky0123/vad-react"
 import { PostReq } from '../functions/requests';
@@ -33,8 +33,11 @@ export function VadWrapper({children}){
     const [vadStatus,setVadStatus] = useState(false)
     const vadRef = useRef({ oldVadrecordingStatus:false,myVad:null })
     const [manualVadStatus,setManualVadStatus] = useState(true)
+    const {ws} = useData()
+
 
     const initReqStatusRef = useRef(false)
+
     //const {PostReq } = useRequest()
 
     // ort.env.wasm.wasmPaths = {
@@ -137,9 +140,24 @@ export function VadWrapper({children}){
           console.log("Vad misfire")
         },
         onSpeechStart: () => {
+          if(ws === null)
+            return ;
+
           console.log("Speech start")
+
+          let data = {
+          route : 'start_timestamp' ,
+          start_timestamp : getTimeStamp(),
+          agent_name:'',
+          agent_id:''
+          }
+          //console.log('')
+          let stringifiedJson = JSON.stringify(data)
+          ws.send(stringifiedJson)
         },
         onSpeechEnd:(audio)=>{
+          if(ws===null)
+            return ;
           console.log("speech end",getTimeStamp(),' ',getOldTimeStamp())
             let data = {
               // this one is for jarvis-in-person
@@ -150,13 +168,43 @@ export function VadWrapper({children}){
               // sessionid:currentUser?.sessionuid,
               // mob:currentUser.userid,
                // userid:currentUser?.userid
+
+               route : 'stop_timestamp' ,
+               stop_timestamp : getTimeStamp(),
+               agent_name:'',
+               agent_id:''
             }
             //processAudioToBase64(audio,`${ngrokServerUrl}`,data)
             //setMsgLoading(true)
+            let stringifiedJson = JSON.stringify(data)
+            ws.send(stringifiedJson)
+            
+
         }
       })
 
-      
+      useEffect(()=>{
+        if(ws===null) return ;
+
+        let intervalId 
+        let data = {
+               route : 'stop_timestamp' ,
+               stop_timestamp : getTimeStamp(),
+               agent_name:'',
+               agent_id:''
+            }
+
+        intervalId = setInterval(()=>{
+            let stringifiedJson = JSON.stringify(data)
+            console.log('just before hitting ws',stringifiedJson)
+            //ws.send(stringifiedJson)
+        },3000)    
+
+        return ()=> {
+          clearInterval(intervalId)
+        }
+        
+      },[ws])
       
 
     function start(){

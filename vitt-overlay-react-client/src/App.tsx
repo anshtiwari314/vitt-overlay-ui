@@ -17,7 +17,7 @@ import {
   Key,
   RefreshCw
 } from 'lucide-react';
-
+import { useData } from './context/DataWrapper'
 import {
   faSearch,
   //faMicrophone,
@@ -59,7 +59,7 @@ function App() {
     
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://b03bfc036d13.ngrok-free.app'
+  const wsUrl = 'wss://011d6d2e9707.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
@@ -70,13 +70,14 @@ function App() {
     permissions_granted: true,
     meetings: [],
   });
-  const [ws,setWs] = React.useState(null)
+  
   const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
   const dispatch = useDispatch()
 
   const {manualVadStatus,setManualVadStatus,vadRecordingOn,
     setVadRecordingOn,vadStatus,setVadStatus,vadInstance,VAD2,userSpeaking} = useVad()
 
+  const {ws,setWs} = useData()
   const wasClosedByUserRef = useRef(false);
 
   React.useEffect(() => {
