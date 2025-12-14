@@ -49,17 +49,21 @@ function TranscriptionList({e}){
 
   console.log('e',e)
   return (
-    <div className="item" style={{marginRight:'0.5rem'}}>
+    <div style={{display:'flex',justifyContent:e.speaker==='agent'? 'flex-start':'flex-end',}}>
+        <div className="item" style={{marginRight:'0.5rem',backgroundColor:e.speaker==='agent'? 'orange':'blue'}}>
             <div className="left i-green">★</div>
             <div className="text">{e.transcription}</div>
+            <div>{e.speaker}</div>
+        </div>
     </div>
+    
   )
 }
 function App() {
     
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://011d6d2e9707.ngrok-free.app/ws'
+  const wsUrl = 'wss://cb740d081778.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
@@ -159,9 +163,15 @@ function App() {
      
       console.log('data',data)
     })
+
+    window.overlay.getRecallBuffer((data)=>{
+     
+      console.log('recall-buffer',data)
+    })
+  
   },[])
 
-  console.log('VAD2', VAD2)
+  //console.log('VAD2', VAD2)
   return (
     <div>
       <div className="card" id="card">

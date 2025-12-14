@@ -105,7 +105,7 @@ async function createDesktopSdkUpload() {
       //type: "desktop_sdk_callback",
       type: "websocket",
       //url:'ws://34.100.145.102/ws',
-      url:'wss://1d17113a67b3.ngrok-free.app',
+      url:'wss://cb740d081778.ngrok-free.app/ws',
       events: ["audio_mixed_raw.data"]
       //events: ["audio_participant_raw.data"]
     },
@@ -336,7 +336,11 @@ app.whenReady().then(() => {
   });
 
   RecallAiSdk.addEventListener('realtime-event', async (evt) => {
-    console.log('realtime event',evt);
+    evt.data.data.buffer = ''
+    console.log('realtime event',evt.data.data.timestamp);
+    
+    win.webContents.send('recall-buffer', evt);
+    
     //wsClient.send(JSON.stringify(evt))
     //console.log('realtime',evt)
     //evt.data.data.buffer 

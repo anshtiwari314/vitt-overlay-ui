@@ -143,7 +143,7 @@ export function VadWrapper({children}){
           if(ws === null)
             return ;
 
-          console.log("Speech start")
+          console.log(`%c speech start ${getTimeStamp()} ${getOldTimeStamp()}`, "color: red; font-weight: bold;")
 
           let data = {
           route : 'start_timestamp' ,
@@ -153,12 +153,12 @@ export function VadWrapper({children}){
           }
           //console.log('')
           let stringifiedJson = JSON.stringify(data)
-          ws.send(stringifiedJson)
+          //ws.send(stringifiedJson)
         },
         onSpeechEnd:(audio)=>{
           if(ws===null)
             return ;
-          console.log("speech end",getTimeStamp(),' ',getOldTimeStamp())
+          console.log(`%c speech end ${getTimeStamp()} ${getOldTimeStamp()}`, "color: white; font-weight: bold;")
             let data = {
               // this one is for jarvis-in-person
               //sessionid:currentUser?.userid,
@@ -177,34 +177,34 @@ export function VadWrapper({children}){
             //processAudioToBase64(audio,`${ngrokServerUrl}`,data)
             //setMsgLoading(true)
             let stringifiedJson = JSON.stringify(data)
-            ws.send(stringifiedJson)
+            //ws.send(stringifiedJson)
             
 
         }
       })
 
-      useEffect(()=>{
-        if(ws===null) return ;
+      // useEffect(()=>{
+      //   if(ws===null) return ;
 
-        let intervalId 
-        let data = {
-               route : 'stop_timestamp' ,
-               stop_timestamp : getTimeStamp(),
-               agent_name:'',
-               agent_id:''
-            }
+      //   let intervalId 
+      //   let data = {
+      //          route : 'stop_timestamp' ,
+      //          stop_timestamp : getTimeStamp(),
+      //          agent_name:'',
+      //          agent_id:''
+      //       }
 
-        intervalId = setInterval(()=>{
-            let stringifiedJson = JSON.stringify(data)
-            console.log('just before hitting ws',stringifiedJson)
-            //ws.send(stringifiedJson)
-        },3000)    
+      //   // intervalId = setInterval(()=>{
+      //   //     let stringifiedJson = JSON.stringify(data)
+      //   //     //console.log('just before hitting ws',stringifiedJson)
+      //   //     //ws.send(stringifiedJson)
+      //   // },3000)    
 
-        return ()=> {
-          clearInterval(intervalId)
-        }
+      //   return ()=> {
+      //     clearInterval(intervalId)
+      //   }
         
-      },[ws])
+      // },[ws])
       
 
     function start(){
