@@ -41,7 +41,9 @@ import LoadingIcons, {
 
 //import FileLoadChecker from '../components/FileLoader'
 import { useVad } from "./context/VadWrapper";
+import { useAuth } from './context/AuthContext'
 import { EntypoMic,EntypoModernMic} from "react-entypo";
+import { getTimeStamp } from './functions/generalFn'
 
 
 
@@ -63,7 +65,7 @@ function App() {
     
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://cb740d081778.ngrok-free.app/ws'
+  const wsUrl = 'wss://21a0546c42a9.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
@@ -80,6 +82,8 @@ function App() {
 
   const {manualVadStatus,setManualVadStatus,vadRecordingOn,
     setVadRecordingOn,vadStatus,setVadStatus,vadInstance,VAD2,userSpeaking} = useVad()
+
+    const {userid,sessionuid} = useAuth()
 
   const {ws,setWs} = useData()
   const wasClosedByUserRef = useRef(false);
@@ -166,7 +170,15 @@ function App() {
 
     window.overlay.getRecallBuffer((data)=>{
      
-      console.log('recall-buffer',data)
+      //console.log('recall-buffer',data)
+      let ob = {
+        type:'recall-buffer',
+        userid,
+        sessionid:sessionuid,
+        data:data,
+        timestamp:getTimeStamp()
+      }
+      ws.send(ob)
     })
   
   },[])
@@ -186,7 +198,7 @@ function App() {
           </div>
         </div>
 
-         {
+         {/* {
           !VAD2.loading ? 
          <CustomFillButtonWithIcon 
           color="#8236f5" 
@@ -204,14 +216,14 @@ function App() {
         <div style={{}}>
             <TailSpin stroke="red"  strokeOpacity={1} speed={.95} style={{margin:'2rem'}}/>
         </div>
-        }
+        } */}
 
       <section className="control-panel">
           {
             sdkState.permissions_granted ?
-              <div className="recording-controls" style={{margin:'0 auto',width:'fit-content',display:'flex',border:'0.1rem solid red'}}>
+              <div className="recording-controls" style={{margin:'0 auto',width:'fit-content',display:'flex'}}>
                 <button
-                  className="start-recording"
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
                   disabled={sdkState.recording }
                   onClick={() => {
                     console.log('sdk state',sdkState);
@@ -231,7 +243,7 @@ function App() {
                   Start Recording
                 </button>
                 <button
-                  className="stop-recording"
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
                   disabled={!sdkState.recording}
                   onClick={() => {
                     recallElectronAPI.send("message-from-renderer", {

@@ -102,10 +102,10 @@ async function createDesktopSdkUpload() {
     //     },
     realtime_endpoints: [
     {
-      //type: "desktop_sdk_callback",
-      type: "websocket",
+      type: "desktop_sdk_callback",
+      //type: "websocket",
       //url:'ws://34.100.145.102/ws',
-      url:'wss://cb740d081778.ngrok-free.app/ws',
+      //url:'wss://cb740d081778.ngrok-free.app/ws',
       events: ["audio_mixed_raw.data"]
       //events: ["audio_participant_raw.data"]
     },
@@ -179,7 +179,7 @@ function createWindow () {
 
     hasShadow: true,
     alwaysOnTop: false,
-    resizable: true,
+    resizable: false,
     skipTaskbar: false,
     //accentColor:'#FF0000',
     fullscreenable: false,
@@ -202,7 +202,7 @@ function createWindow () {
   //win.setIgnoreMouseEvents(true, { forward: true });
   //win.loadFile('index.html');
   win.loadURL('http://localhost:5173');
-  win.webContents.openDevTools()
+  //win.webContents.openDevTools()
 
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
