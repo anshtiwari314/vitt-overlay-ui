@@ -44,15 +44,44 @@ import { useVad } from "./context/VadWrapper";
 import { useAuth } from './context/AuthContext'
 import { EntypoMic,EntypoModernMic} from "react-entypo";
 import { getTimeStamp } from './functions/generalFn'
+import { addPrompt } from './redux/reducers/promptsReducer'
 
-
-
-function TranscriptionList({e}){
+function TranscriptionList(){
+  const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
+  return (
+    <div>
+    {transcriptions.map((e)=><Transcription e={e}/>)}
+          {/* <div className="item">
+            <div className="left i-indigo">💡</div>
+            <div className="text">Suggest showing demo slide.</div>
+          </div>
+          <div className="item">
+            <div className="left i-yellow">⏰</div>
+            <div className="text">Remind to discuss pricing options.</div>
+          </div>
+          <div className="item">
+            <div className="left i-red">⚠️</div>
+            <div className="text">Ask about decision timeline.</div>
+          </div>
+          <div className="item">
+            <div className="left i-teal">🔗</div>
+            <div className="text">Link fast onboarding → faster RSOI.</div>
+          </div>
+          <div className="item">
+            <div className="left i-gray">📄</div>
+            <div className="text">Security Whitepaper.pdf</div>
+          </div> */}
+    </div>
+  )
+}
+function Transcription({e}){
 
   console.log('e',e)
   return (
-    <div style={{display:'flex',justifyContent:e.speaker==='agent'? 'flex-start':'flex-end',}}>
-        <div className="item" style={{marginRight:'0.5rem',backgroundColor:e.speaker==='agent'? 'orange':'blue'}}>
+    <div style={{display:'flex',justifyContent: 'flex-start',margin:'0.5rem 0'}}>
+        <div className="item" style={{marginRight:'0.5rem',
+         // backgroundColor:e.speaker==='agent'? 'orange':'blue'
+          }}>
             <div className="left i-green">★</div>
             <div className="text">{e.transcription}</div>
             <div>{e.speaker}</div>
@@ -61,13 +90,40 @@ function TranscriptionList({e}){
     
   )
 }
+
+function PromptList(){
+  const prompts = useSelector(state=>state.promptsReducer.prompts)
+
+  console.log('prompts',prompts)
+  return (
+    <div>
+    {prompts?.map((e)=><SinglePrompt e={e}/>)}
+          
+    </div>
+  )
+}
+
+function SinglePrompt({e}){
+  return (
+    <div style={{display:'flex',justifyContent:'flex-start',margin:'0.5rem 0'}}>
+        <div className="item" style={{marginRight:'0.5rem',
+         // backgroundColor:e.speaker==='agent'? 'orange':'blue'
+          }}>
+            <div className="left i-green">★</div>
+            <div className="text">{e.prompt}</div>
+            {/* <div>{e.speaker}</div> */}
+        </div>
+    </div>
+  )
+}
 function App() {
     
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://21a0546c42a9.ngrok-free.app/ws'
+  const wsUrl = 'wss://50ac0bd1a852.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
+  const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
   const [sdkState, setSdkState] = React.useState({
     bot_id: null,
     recording: false,
@@ -109,11 +165,16 @@ function App() {
   }, []);
 
   React.useEffect(()=>{
-    const tempWs = new WebSocket(wsUrl);
+
+    let tempWs ;
+    let reconnectInterval = 1000; // 5 seconds
+    function connect(){
+       tempWs = new WebSocket(wsUrl);
 
     tempWs.onopen = (event) => {
       console.log('WebSocket connection opened:', event);
-      tempWs.send('Hello from the browser!'); // Send a message to the server
+      tempWs.send('Hello from the browser!');
+      setWs(tempWs) // Send a message to the server
     };
 
     // Event listener for incoming messages
@@ -123,7 +184,14 @@ function App() {
       console.log('tempws',result)
       
       console.log('Message from server:', result);
-      dispatch(addTranscription(result))
+    //  dispatch(addTranscription(result))
+      
+      if(result.type==='transcript'){
+        dispatch(addTranscription(result))
+      }
+      if(result.type==='llm_response'){
+        dispatch(addPrompt(result))
+      }
     };
 
     // Event listener for errors
@@ -134,10 +202,17 @@ function App() {
     // Event listener for when the connection is closed
     tempWs.onclose = (event) => {
       console.log('WebSocket connection closed:', event);
+      setTimeout(connect, reconnectInterval);
     };
-    setWs(tempWs)
 
-    return ()=> tempWs.close()
+    
+    }
+    
+    connect();
+
+    return ()=>{ 
+      tempWs && tempWs.close()
+    }
   },[])
 
 
@@ -181,20 +256,35 @@ function App() {
       ws.send(ob)
     })
   
-  },[])
+  },[ws])
 
   //console.log('VAD2', VAD2)
+
+  const closeApp = () => {
+    // Call the function exposed in preload.js
+    console.log('closeApp called')
+    window.overlay.quitApp();
+  };
+
+  function renderChildren(){
+    if (selectedTab === 'transcript') {
+      return <TranscriptionList />
+    }else if (selectedTab === 'prompts') {
+      return <PromptList/>
+    }
+    return  <TranscriptionList/>
+  }
   return (
-    <div>
-      <div className="card" id="card">
+    <div className='drag-region'>
+      <div className="card drag-region" id="card" >
         <div className="card-header drag-region">
           <div className="title">
             <span className="dot"></span>
-            <span>Jarvis Live</span>
+            <span>Vitt Overlay</span>
           </div>
           <div className="header-actions no-drag">
-            <button className="icon-btn" title="Mute / Unmute"><span>🔔</span></button>
-            <button className="icon-btn" title="Pause"><span>⏸️</span></button>
+            <button className="icon-btn" title="Notifications"><span>🔔</span></button>
+            <button className="icon-btn" title="Quit" onClick={closeApp} style={{fontSize:'0.85rem'}}><span>❌</span></button>
           </div>
         </div>
 
@@ -218,7 +308,7 @@ function App() {
         </div>
         } */}
 
-      <section className="control-panel">
+      <section className="control-panel no-drag">
           {
             sdkState.permissions_granted ?
               <div className="recording-controls" style={{margin:'0 auto',width:'fit-content',display:'flex'}}>
@@ -240,7 +330,7 @@ function App() {
                   }}
                 >
                   <Mic strokeWidth={2} size={20} />
-                  Start Recording
+                  Start 
                 </button>
                 <button
                   className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
@@ -252,49 +342,38 @@ function App() {
                   }}
                 >
                   <Pause strokeWidth={2} size={20} />
-                  Stop Recording
+                  Pause
                 </button>
               </div>
             :
             <div className="recording-controls">Permissions haven't been granted yet! Please do so in Settings.</div>
           }
       </section>
-        <div className="list" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'65vh'}}>
-          {transcriptions.map((e)=><TranscriptionList e={e}/>)}
-          <div className="item">
-            <div className="left i-indigo">💡</div>
-            <div className="text">Suggest showing demo slide.</div>
-          </div>
-          <div className="item">
-            <div className="left i-yellow">⏰</div>
-            <div className="text">Remind to discuss pricing options.</div>
-          </div>
-          <div className="item">
-            <div className="left i-red">⚠️</div>
-            <div className="text">Ask about decision timeline.</div>
-          </div>
-          <div className="item">
-            <div className="left i-teal">🔗</div>
-            <div className="text">Link fast onboarding → faster RSOI.</div>
-          </div>
-          <div className="item">
-            <div className="left i-gray">📄</div>
-            <div className="text">Security Whitepaper.pdf</div>
-          </div>
+        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh'}}>
+          {renderChildren()}
         </div>
 
         <div className="footer no-drag">
-          <button className="tool">
+          <button className="tool" onClick={()=>setSelectedTab('transcript')} style={{backgroundColor:selectedTab==='transcript'?'rgba(0,0,0,0.25)':'transparent'}}>
             <div className="t-ic">📝</div>
-            <div className="t-txt">Transcript</div>
+            <div className="t-txt" 
+          //  style={{color:selectedTab==='transcript'?'white':'rgba(0,0,0,0.5)'}}
+            >Transcript</div>
           </button>
           <button className="tool">
             <div className="t-ic">🤖</div>
-            <div className="t-txt">Chat with AI</div>
+            <div className="t-txt" 
+           // style={{color:'rgba(0,0,0,0.5)'}}
+            >Chat with AI</div>
           </button>
-          <button className="tool">
-            <div className="t-ic">📊</div>
-            <div className="t-txt">Summary</div>
+          <button className="tool" 
+          onClick={()=>setSelectedTab('prompts')} 
+          style={{backgroundColor:selectedTab==='prompts'?'rgba(0,0,0,0.25)':'transparent'}}
+          >
+            <div className="t-ic" >📊</div>
+            <div className="t-txt"  
+           // style={{color:selectedTab==='prompts'?'white':'rgba(0,0,0,0.5)'}}
+            >Prompts</div>
           </button>
           <button className="tool">
             <div className="t-ic">⚙️</div>

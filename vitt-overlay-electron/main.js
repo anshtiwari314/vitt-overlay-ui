@@ -102,10 +102,10 @@ async function createDesktopSdkUpload() {
     //     },
     realtime_endpoints: [
     {
-      type: "desktop_sdk_callback",
-      //type: "websocket",
+      //type: "desktop_sdk_callback",
+      type: "websocket",
       //url:'ws://34.100.145.102/ws',
-      //url:'wss://cb740d081778.ngrok-free.app/ws',
+      url:'wss://50ac0bd1a852.ngrok-free.app/ws',
       events: ["audio_mixed_raw.data"]
       //events: ["audio_participant_raw.data"]
     },
@@ -167,7 +167,7 @@ async function startRecording(windowId) {
 
 
 function createWindow () {
-  const width = 420;
+  const width = 520;
   const height = 520;
 
   win = new BrowserWindow({
@@ -467,7 +467,11 @@ app.whenReady().then(() => {
     acquirePermissionsOnStartup: ["microphone", "accessibility", "screen-capture"],
     config: {}
   });
-  
+
+  ipcMain.on('close-app', () => {
+    //console.log('app is now closed');
+    app.quit();
+});
   ipcMain.on('message-from-renderer', async (event, arg) => {
     console.log('message-from-renderer', arg);
     switch (arg.command) {

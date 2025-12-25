@@ -5,7 +5,8 @@ console.log("Preload loaded");
 contextBridge.exposeInMainWorld('overlay', {
   onClickThrough: (cb) => ipcRenderer.on('overlay:clickThrough', (_e, val) => cb(val)),
   somethingHappened:(cb)=> ipcRenderer.on('something-happened',(_e,data)=>cb(data)),
-  getRecallBuffer:(cb)=> ipcRenderer.on('recall-buffer',(_e,data)=>cb(data))
+  getRecallBuffer:(cb)=> ipcRenderer.on('recall-buffer',(_e,data)=>cb(data)),
+  quitApp: () => ipcRenderer.send('close-app')
 });
 
 contextBridge.exposeInMainWorld('electronAPI',{
