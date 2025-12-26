@@ -9,9 +9,10 @@ export function useData(){
 export function DataWrapper({children}){
     
     const [ws,setWs] = React.useState(null)
+    const wsRef = React.useRef(null);
 
     let values ={
-        ws,setWs
+        ws,setWs,wsRef
     }
     return (
         //@ts-ignore

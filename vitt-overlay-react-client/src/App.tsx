@@ -76,7 +76,7 @@ function TranscriptionList(){
 }
 function Transcription({e}){
 
-  console.log('e',e)
+  //console.log('e',e)
   return (
     <div style={{display:'flex',justifyContent: 'flex-start',margin:'0.5rem 0'}}>
         <div className="item" style={{marginRight:'0.5rem',
@@ -120,7 +120,7 @@ function App() {
     
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://50ac0bd1a852.ngrok-free.app/ws'
+  const wsUrl = 'wss://4e013f0bfcc3.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
@@ -141,7 +141,7 @@ function App() {
 
     const {userid,sessionuid} = useAuth()
 
-  const {ws,setWs} = useData()
+  const {ws,setWs,wsRef} = useData()
   const wasClosedByUserRef = useRef(false);
 
   React.useEffect(() => {
@@ -165,23 +165,32 @@ function App() {
   }, []);
 
   React.useEffect(()=>{
+    if(wsRef.current)
+      return null 
+    console.log('setting up ws connection to',wsUrl)
 
     let tempWs ;
     let reconnectInterval = 1000; // 5 seconds
+
     function connect(){
        tempWs = new WebSocket(wsUrl);
 
     tempWs.onopen = (event) => {
       console.log('WebSocket connection opened:', event);
+
+
       tempWs.send('Hello from the browser!');
+
+      //setTimeout(())
+      wsRef.current = tempWs;
       setWs(tempWs) // Send a message to the server
     };
 
     // Event listener for incoming messages
     tempWs.onmessage = (event) => {
-      console.log('tempws',event)
+      //console.log('tempws',event)
       let result = JSON.parse(event.data);
-      console.log('tempws',result)
+      //console.log('tempws',result)
       
       console.log('Message from server:', result);
     //  dispatch(addTranscription(result))
@@ -202,16 +211,21 @@ function App() {
     // Event listener for when the connection is closed
     tempWs.onclose = (event) => {
       console.log('WebSocket connection closed:', event);
+      wsRef.current && wsRef.current.close();
+      
       setTimeout(connect, reconnectInterval);
     };
 
-    
+    wsRef.current = tempWs;
     }
     
     connect();
 
+   
     return ()=>{ 
-      tempWs && tempWs.close()
+      wsRef.current && wsRef.current.close();
+      //tempWs && tempWs.close();
+      setWs(null);
     }
   },[])
 
@@ -235,9 +249,9 @@ function App() {
   },[ws])
 
   useEffect(()=>{
-    if(!recallElectronAPI)
+    if(!recallElectronAPI || !ws)
       return ;
-    console.log('overlay object in electron',window.overlay)
+   // console.log('overlay object in electron',window.overlay)
     window.overlay.somethingHappened((data)=>{
      
       console.log('data',data)
@@ -245,7 +259,7 @@ function App() {
 
     window.overlay.getRecallBuffer((data)=>{
      
-      //console.log('recall-buffer',data)
+      console.log('recall-buffer',data)
       let ob = {
         type:'recall-buffer',
         userid,

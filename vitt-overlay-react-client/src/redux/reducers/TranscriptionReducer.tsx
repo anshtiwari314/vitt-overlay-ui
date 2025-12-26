@@ -308,12 +308,12 @@ let transcriptionSlice = createSlice({
     initialState:{transcriptions:[]},
     reducers:{
         addTranscription:(state,action)=>{
-            console.log('add Transcription triggers',state,action)
+            //console.log('add Transcription triggers',state,action)
             let tempObj = {
               transcription:action.payload.text,
               speaker:action.payload.speaker
             }
-            console.log('tempObj',tempObj)
+            //console.log('tempObj',tempObj)
             state.transcriptions = [tempObj,...state.transcriptions]
             console.log('after modifying state',current(state))
             return state;

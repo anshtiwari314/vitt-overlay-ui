@@ -8,11 +8,11 @@ export default function PrivateRoute({component,...rest}:{component:React.ReactN
     const {currentUser,isAuthenticated} = useAuth()
     // console.log('current user in private route',currentUser)
    // const navigate = useNavigate()
-    console.log('calling current user from private route',currentUser)
+    //console.log('calling current user from private route',currentUser)
     
     
 
-    console.log('private route',currentUser,isAuthenticated)
+    //console.log('private route',currentUser,isAuthenticated)
 
     if(currentUser !== null){
         return component

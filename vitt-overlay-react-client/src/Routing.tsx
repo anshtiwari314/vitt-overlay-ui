@@ -39,7 +39,7 @@ export default function Routing(){
 //   setIsAuthenticated(true)
 //   },[]) 
 
-  console.log('currentUser',currentUser,isAuthenticated)
+  //console.log('currentUser',currentUser,isAuthenticated)
 
 //   if(!isAuthenticated){
 //     return null
