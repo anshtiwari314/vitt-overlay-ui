@@ -336,7 +336,7 @@ app.whenReady().then(() => {
   });
 
   RecallAiSdk.addEventListener('realtime-event', async (evt) => {
-    evt.data.data.buffer = ''
+    //evt.data.data.buffer = ''
     console.log('realtime event',evt.data.data.timestamp);
     
     win.webContents.send('recall-buffer', evt);

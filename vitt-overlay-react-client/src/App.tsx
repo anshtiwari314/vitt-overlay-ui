@@ -249,7 +249,7 @@ function App() {
   },[ws])
 
   useEffect(()=>{
-    if(!recallElectronAPI || !ws)
+    if(!recallElectronAPI )
       return ;
    // console.log('overlay object in electron',window.overlay)
     window.overlay.somethingHappened((data)=>{
