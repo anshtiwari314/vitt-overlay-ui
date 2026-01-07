@@ -1,223 +1,376 @@
-"use client"
-
+import type React from "react"
 import { useState } from "react"
-// import { useAuth } from '../context/AuthContext'; // Assuming you have this context
-import { v4 as uuidv4 } from "uuid"
-import '../App.css'
+import { Lock, Mail, ArrowRight, User } from "lucide-react"
+import axios from "axios"
 import { useAuth } from "../context/AuthContext"
-// --- SVG Icons ---
-// User Icon SVG
-const UserIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-  </svg>
-)
 
-// Lock Icon SVG
-const LockIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-    <path
-      fillRule="evenodd"
-      d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-      clipRule="evenodd"
-    />
-  </svg>
-)
+const GOOGLE_CLIENT_ID = "382932316402-4sopjcnfn116nb2nqqa1e32gnjjsuddh.apps.googleusercontent.com"
+const REDIRECT_URI = "http://localhost:8000/google/callback"
+const SCOPE = "openid email profile"
+const SIGNUP_URL = "http://localhost:3000/signup" // Add your signup URL here
 
-const EyeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-    <path
-      fillRule="evenodd"
-      d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-      clipRule="evenodd"
-    />
-  </svg>
-)
-
-const EyeOffIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-    <path
-      fillRule="evenodd"
-      d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z"
-      clipRule="evenodd"
-    />
-    <path d="M15.171 13.576l1.472 1.473a10.028 10.028 0 001.585-2.755c-1.274-4.057-5.064-7-9.542-7a9.972 9.972 0 00-2.742.384l2.06 2.06a4 4 0 015.130 5.130z" />
-  </svg>
-)
-
-export default function Login() {
-  const [loading, setLoading] = useState(false)
+export default function MiniLoginPage() {
+  const {setCurrentUser}=useAuth();
+  const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState("")
-  const [pass, setPass] = useState("")
-  const [error, setError] = useState(null)
-  const [showPassword, setShowPassword] = useState(false)
+  const [password, setPassword] = useState("")
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [showSignUp, setShowSignUp] = useState(false)
+  const [signupEmail, setSignupEmail] = useState("")
+  const [signupPassword, setSignupPassword] = useState("")
+  const [signupName, setSignupName] = useState("")
+  const [forgotEmail, setForgotEmail] = useState("")
 
-  const width = 420;
-  const height = 520;
-
-  const { setCurrentUser } = useAuth()
-
-  function handleChecks() {
-    if (email === "") {
-      setError("Username field can't be empty")
-      return
+  const submitLoginBtn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    try {
+      setIsLoading(true)
+      const res = await axios.post(
+        "http://localhost:5000/login-web-portal",
+        { email, password },
+        {
+          headers: { "Content-Type": "application/json" },
+          withCredentials: true,
+        },
+      )
+      console.log("Login success", res.data)
+      setIsLoading(false)
+      setCurrentUser(res.data.user);
+      //app ke url ke /home pe bhej do 
+      setTimeout(() => {
+  window.location.assign("/home");
+}, 0);
+    } catch (err: any) {
+      console.error("Login failed", err.response?.data || err.message)
+      setIsLoading(false)
     }
-    if (pass === "") {
-      setError("Password field can't be empty")
-      return
-    }
-    setError(null)
-    handleAuth()
   }
 
-  function handleAuth() {
-    setLoading(true)
-
-    // const url = `https://wpv7kxos9g.execute-api.ap-south-1.amazonaws.com/test/recruito-upload-apis/main_router`
-    const url='https://recruito.vitti.insure/lms_router'
-    fetch(url, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        route_name:"main_router",
-        json_data:{
-          trigger_func: "check_agent_login",
-          params: {
-            userid: email,
-            password: pass,
-          }
-        }
-        }),
-      cache: "default",
-    })
-      .then((res) => {
-        if (!res.ok) {
-          return res.json().then((err) => {
-            throw err
-          })
-        }
-        console.log("Response status:", res)
-        return res.json()
-      })
-      .then((result) => {
-        setLoading(false)
-        if (result.error) {
-          setError(result.error)
-        } else if (result.result === true) {
-          //console.log('email',email)
-          localStorage.setItem("insurance-auth", JSON.stringify({ userid: result.data.sessionid }))
-          localStorage.setItem("agent_name", JSON.stringify({ agent_name: email }))
-          setCurrentUser({ userid: email, sessionuid: uuidv4() })
-        } else {
-          setError("Login failed. Please check your credentials.")
-        }
-      })
-      .catch((err) => {
-        setLoading(false)
-        setError(err.error || "An unexpected error occurred. Please try again.")
-        console.error("Fetch error:", err)
-      })
+  const handleSignUp = async (e: React.FormEvent) => {
+   window.open('https://web-portal-sales.netlify.app/sign-up','_blank')
   }
 
-  const handleSubmit = (e) => {
+  const handleGoogleLogin = () => {
+    const authUrl =
+      "https://accounts.google.com/o/oauth2/v2/auth" +
+      `?client_id=${GOOGLE_CLIENT_ID}` +
+      `&redirect_uri=${REDIRECT_URI}` +
+      `&response_type=code` +
+      `&scope=${encodeURIComponent(SCOPE)}` +
+      `&prompt=consent` +
+      `&state=login`
+    window.open(authUrl, "_blank")
+  }
+
+  const handleMicrosoftLogin = () => {
+    window.open("http://localhost:5000/auth/microsoft/login", "_blank")
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    handleChecks()
+    try {
+      setIsLoading(true)
+      console.log("Password reset email sent to:", forgotEmail)
+      setIsLoading(false)
+      setShowForgotPassword(false)
+    } catch (err) {
+      console.error("Error sending reset email", err)
+      setIsLoading(false)
+    }
   }
 
   return (
-    // Main wrapper with a light gray background
-    <div className="flex items-center justify-center min-h-screen bg-slate-50 font-sans" style={{ '-webkit-app-region': 'drag' }}>
-      {/* Login card with white background and shadow */}
-      <div className="p-8 space-y-6 bg-white rounded-xl shadow-lg" style={{ width: `${width}px`, height: `${height}px`,  '-webkit-app-region': 'drag' }}>
-        {/* Header */}
-        <div className="text-center" style={{ '-webkit-app-region': 'drag' }}>
-          <h1 className="text-3xl font-bold text-slate-800">Sign In</h1>
-          <p className="mt-2 text-slate-500">Welcome back! Please enter your details.</p>
-        </div>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+      {/* Container with fixed dimensions */}
+      <div className="w-full max-w-[500px] bg-slate-800/50 backdrop-blur-md rounded-2xl border border-slate-700/50 shadow-2xl overflow-hidden">
+        {/* Login Form */}
+        {!showForgotPassword && !showSignUp && (
+          <div className="p-6 space-y-5">
+            {/* Header */}
+            <div className="space-y-2 text-center">
+              <div className="flex justify-center mb-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-lg">v</span>
+                </div>
+              </div>
+              <h1 className="text-2xl font-bold text-white">Welcome back</h1>
+              <p className="text-sm text-slate-400">Sign in to your account</p>
+            </div>
 
-        {/* Display error message if it exists */}
-        {error && (
-          <div className="p-3 text-sm font-semibold text-red-800 bg-red-100 border border-red-200 rounded-lg text-center">
-            {error}
+            {/* OAuth Buttons */}
+           {/* Email & Password Form - TOP */}
+<form onSubmit={submitLoginBtn} className="space-y-3">
+  <div className="space-y-1">
+    <label className="text-xs font-medium text-slate-300">Email</label>
+    <div className="relative">
+      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+      <input
+        type="email"
+        placeholder="you@company.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+        required
+      />
+    </div>
+  </div>
+
+  <div className="space-y-1">
+    <label className="text-xs font-medium text-slate-300">Password</label>
+    <div className="relative">
+      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+      <input
+        type="password"
+        placeholder="••••••••"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white"
+        required
+      />
+    </div>
+  </div>
+
+  <button
+    type="submit"
+    disabled={isLoading}
+    className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+  >
+    {isLoading ? "Signing in..." : "Sign in"}
+  </button>
+</form>
+
+{/* Divider */}
+<div className="relative my-4">
+  <div className="h-px bg-slate-600/50" />
+  <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-slate-800/50 px-2 text-xs text-slate-400">
+    or continue with
+  </span>
+</div>
+
+{/* Social Login - BOTTOM (Side by Side) */}
+ {/* Social Login - ICONS ONLY */}
+<div className="grid grid-cols-2 gap-3">
+  <button
+    onClick={handleGoogleLogin}
+    disabled={isLoading}
+    className="h-10 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg flex items-center justify-center transition-colors"
+    title="Continue with Google"
+  >
+    <svg className="w-5 h-5" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  </button>
+
+  <button
+    onClick={handleMicrosoftLogin}
+    disabled={isLoading}
+    className="h-10 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg flex items-center justify-center transition-colors"
+    title="Continue with Microsoft"
+  >
+    <svg className="w-5 h-5" viewBox="0 0 23 23">
+      <path fill="#f35325" d="M1 1h10v10H1z" />
+      <path fill="#81bc06" d="M12 1h10v10H12z" />
+      <path fill="#05a6f0" d="M1 12h10v10H1z" />
+      <path fill="#ffba08" d="M12 12h10v10H12z" />
+    </svg>
+  </button>
+</div>
+
+
+
+            {/* Footer Links */}
+            <div className="space-y-2 text-center">
+              <button
+                onClick={() => setShowForgotPassword(true)}
+                className="w-full text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                Forgot your password?
+              </button>
+              <div className="text-xs text-slate-500">
+                Don't have an account?{" "}
+                <button
+                  onClick={handleSignUp}
+                  // target="_blank"
+                  // rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                >
+                  Sign up
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Login Form */}
-        <form
-          className="space-y-6"
-          style={{ '-webkit-app-region': 'no-drag' }}
-          //onSubmit={handleSubmit}
-        >
-          {/* Username/Email Input */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-600 mb-1">Username</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <UserIcon />
-              </div>
-              <input
-                type="text"
-                placeholder="e.g. rajesh.kumar@company.com"
-                className="w-full py-2.5 pl-10 pr-4 text-slate-800 bg-slate-50 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-400"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+        {showSignUp && !showForgotPassword && (
+          <div className="p-6 space-y-4">
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-bold text-white">Create account</h2>
+              <p className="text-sm text-slate-400">Join us today</p>
             </div>
-          </div>
 
-          {/* Password Input */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-600 mb-1">Password</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <LockIcon />
-              </div>
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="e.g. MySecurePass@2024"
-                className="w-full py-2.5 pl-10 pr-12 text-slate-800 bg-slate-50 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-slate-400"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-              />
+            {/* OAuth Buttons */}
+            <div className="space-y-2">
               <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="w-full h-9 bg-slate-700/50 hover:bg-slate-700 text-white text-xs border border-slate-600 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                <svg className="w-3 h-3" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+                <span>Google</span>
+              </button>
+
+              <button
+                onClick={handleMicrosoftLogin}
+                disabled={isLoading}
+                className="w-full h-9 bg-slate-700/50 hover:bg-slate-700 text-white text-xs border border-slate-600 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 23 23">
+                  <path fill="#f35325" d="M1 1h10v10H1z" />
+                  <path fill="#81bc06" d="M12 1h10v10H12z" />
+                  <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                  <path fill="#ffba08" d="M12 12h10v10H12z" />
+                </svg>
+                <span>Microsoft</span>
               </button>
             </div>
-          </div>
 
-          {/* Login Button */}
-          <div>
+            {/* Divider */}
+            <div className="relative">
+              <div className="h-px bg-slate-600/50" />
+              <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-slate-800/50 px-2 text-xs text-slate-400">
+                or email
+              </span>
+            </div>
+
+            {/* Sign Up Form */}
+            <form onSubmit={handleSignUp} className="space-y-2.5">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300">Full name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    value={signupName}
+                    onChange={(e) => setSignupName(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    placeholder="you@company.com"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isLoading ? "Creating account..." : "Sign up"}
+              </button>
+            </form>
+
             <button
-              type="submit"
-              className="w-full py-3 font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
-              disabled={loading}
-              onClick={() => handleChecks()}
+              onClick={() => setShowSignUp(false)}
+              className="w-full text-center text-xs text-slate-400 hover:text-white transition-colors"
             >
-              {loading ? (
-                <div className="w-6 h-6 border-4 border-t-transparent border-white rounded-full animate-spin"></div>
-              ) : (
-                "Sign In"
-              )}
+              Already have an account? Sign in
             </button>
           </div>
-        </form>
+        )}
 
-        <div className="text-sm text-center text-slate-500" style={{ '-webkit-app-region': 'no-drag' }}>
-          <p>
-            Don't have an account?{" "}
-            <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500">
-              Sign Up
-            </a>
-          </p>
-        </div>
+        {/* Forgot Password Form */}
+        {showForgotPassword && !showSignUp && (
+          <div className="p-6 space-y-4">
+            <div className="space-y-2 text-center">
+              <h2 className="text-xl font-bold text-white">Reset password</h2>
+              <p className="text-sm text-slate-400">Enter your email to receive reset instructions</p>
+            </div>
+
+            <form onSubmit={handleForgotPassword} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-300">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    placeholder="you@company.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isLoading ? "Sending..." : "Send reset link"}
+              </button>
+            </form>
+
+            <button
+              onClick={() => {
+                setShowForgotPassword(false)
+                setForgotEmail("")
+              }}
+              className="w-full text-center text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Back to login
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
