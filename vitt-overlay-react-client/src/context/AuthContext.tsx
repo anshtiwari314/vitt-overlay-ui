@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React,{createContext,useContext, useEffect, useState} from 'react'
-// import {v4 as uuidv4} from 'uuid'
+ import {v4 as uuidv4} from 'uuid'
 
 const Auth = createContext('Auth')
 
@@ -10,8 +10,8 @@ export function useAuth(){
 
 export default function AuthContext({children}:{children:React.ReactNode}) {
   
-   // const [currentUser,setCurrentUser] = useState({userid:'vois',sessionuid:uuidv4()})
-   const [currentUser,setCurrentUser] = useState<any>(null);
+   const [currentUser,setCurrentUser] = useState({userid:'vois',sessionuid:uuidv4()})
+  // const [currentUser,setCurrentUser] = useState<any>(null);
    const [isAuthenticated,setIsAuthenticated] = useState(false)
    const [access_token,setaccess_token]=useState("")
    const [loading,setLoading]=useState(true)

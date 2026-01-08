@@ -167,7 +167,7 @@ async function startRecording(windowId) {
 
 
 function createWindow () {
-  const width = 520;
+  const width = 420;
   const height = 520;
 
   win = new BrowserWindow({
