@@ -5,7 +5,7 @@ import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
-
+import { Power } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 import {
@@ -44,6 +44,7 @@ import { useVad } from "./context/VadWrapper";
 import { useAuth } from './context/AuthContext'
 import { EntypoMic,EntypoModernMic} from "react-entypo";
 import { getTimeStamp } from './functions/generalFn'
+import axios from 'axios'
 import { addPrompt } from './redux/reducers/promptsReducer'
 
 function TranscriptionList(){
@@ -117,10 +118,10 @@ function SinglePrompt({e}){
   )
 }
 function App() {
-    
+    console.log('App rendered hui');
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://4e013f0bfcc3.ngrok-free.app/ws'
+  const wsUrl = 'wss://f5b0f5d3689a.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
@@ -132,6 +133,30 @@ function App() {
     permissions_granted: true,
     meetings: [],
   });
+ const logoutBtn = async () => {
+  try {
+    console.log("logout btn clicked");
+
+    const res = await axios.post(
+      "http://localhost:5000/logout",
+      {},
+      { withCredentials: true }
+    );
+
+    console.log("logout res", res);
+
+    // recallElectronAPI.send("message-from-renderer", {
+    //   command: "logout",
+    // });
+
+    // better than reload
+    window.location.href = "/login";
+  } catch (err) {
+    console.error("Logout failed", err);
+    alert("Logout nahi hua bhai, thoda ruk ke try kar");
+  }
+};
+
   
   const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
   const dispatch = useDispatch()
@@ -139,7 +164,7 @@ function App() {
   const {manualVadStatus,setManualVadStatus,vadRecordingOn,
     setVadRecordingOn,vadStatus,setVadStatus,vadInstance,VAD2,userSpeaking} = useVad()
 
-    const {userid,sessionuid} = useAuth()
+    const {currentUser,sessionuid} = useAuth()
 
   const {ws,setWs,wsRef} = useData()
   const wasClosedByUserRef = useRef(false);
@@ -262,12 +287,13 @@ function App() {
       console.log('recall-buffer',data)
       let ob = {
         type:'recall-buffer',
-        userid,
+        userid:currentUser?.id,
         sessionid:sessionuid,
         data:data,
         timestamp:getTimeStamp()
       }
-      ws.send(ob)
+      // ws.send(ob)
+      ws.send(JSON.stringify(ob))
     })
   
   },[ws])
@@ -296,10 +322,14 @@ function App() {
             <span className="dot"></span>
             <span>Vitt Overlay</span>
           </div>
-          <div className="header-actions no-drag">
-            <button className="icon-btn" title="Notifications"><span>🔔</span></button>
-            <button className="icon-btn" title="Quit" onClick={closeApp} style={{fontSize:'0.85rem'}}><span>❌</span></button>
-          </div>
+      <div className="header-actions no-drag flex items-center gap-2">
+        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Notifications">🔔</button>
+        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Quit" onClick={closeApp} style={{fontSize:'0.85rem'}}>❌</button>
+        <button onClick={logoutBtn} title="Logout" className="p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition">
+          <Power size={18} />
+        </button>
+      </div>
+
         </div>
 
          {/* {
