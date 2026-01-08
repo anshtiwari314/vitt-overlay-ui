@@ -7,7 +7,7 @@ import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
 import { Power } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-
+import parse from 'html-react-parser';
 import {
   CheckCircle2,
   AlertCircle,
@@ -107,11 +107,13 @@ function PromptList(){
 function SinglePrompt({e}){
   return (
     <div style={{display:'flex',justifyContent:'flex-start',margin:'0.5rem 0'}}>
-        <div className="item" style={{marginRight:'0.5rem',
+        <div className="w-full" style={{marginRight:'0.5rem',
          // backgroundColor:e.speaker==='agent'? 'orange':'blue'
+         //width:'510px'
+         backgroundColor:'rgba(255,255,255,0.1)',padding:'0.8rem 1rem',borderRadius:'0.5rem'
           }}>
-            <div className="left i-green">★</div>
-            <div className="text">{e.prompt}</div>
+            {/* <div className="left i-green">★</div> */}
+            <p className="text w-full" style={{width:'', textWrap:'wrap'}}>{parse(e.prompt)}</p>
             {/* <div>{e.speaker}</div> */}
         </div>
     </div>
@@ -153,7 +155,7 @@ function App() {
     window.location.href = "/login";
   } catch (err) {
     console.error("Logout failed", err);
-    alert("Logout nahi hua bhai, thoda ruk ke try kar");
+    //alert("Logout nahi hua bhai, thoda ruk ke try kar");
   }
 };
 
@@ -393,7 +395,7 @@ function App() {
             <div className="recording-controls">Permissions haven't been granted yet! Please do so in Settings.</div>
           }
       </section>
-        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh'}}>
+        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh',width:'80vw'}}>
           {renderChildren()}
         </div>
 

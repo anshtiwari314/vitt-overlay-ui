@@ -8,7 +8,7 @@ let initPromptsState = [
     },
     {
         id:'prompt_002',
-         prompt:'Give a summary of the meeting 2',
+         prompt:'<p>Give a summary of the meeting 2</p>',
         timestamp:''
     }
 ]
