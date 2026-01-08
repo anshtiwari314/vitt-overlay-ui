@@ -168,7 +168,7 @@ async function startRecording(windowId) {
 
 function createWindow () {
   const width = 420;
-  const height = 520;
+  const height = 550;
 
   win = new BrowserWindow({
     width,
@@ -202,7 +202,7 @@ function createWindow () {
   //win.setIgnoreMouseEvents(true, { forward: true });
   //win.loadFile('index.html');
   win.loadURL('http://localhost:5173');
-  win.webContents.openDevTools()
+ // win.webContents.openDevTools()
 
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");

@@ -395,7 +395,7 @@ function App() {
             <div className="recording-controls">Permissions haven't been granted yet! Please do so in Settings.</div>
           }
       </section>
-        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh',width:'80vw'}}>
+        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh'}}>
           {renderChildren()}
         </div>
 
