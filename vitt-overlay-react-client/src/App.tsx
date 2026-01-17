@@ -5,7 +5,7 @@ import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
-import { Power } from "lucide-react";
+import { ExternalLink, Power } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 import {
@@ -66,7 +66,7 @@ function App() {
     console.log('App rendered hui');
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://f5b0f5d3689a.ngrok-free.app/ws'
+  const wsUrl = 'wss://d71269203751.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [sdkState, setSdkState] = React.useState({
@@ -85,6 +85,7 @@ function App() {
       "http://localhost:5000/logout",
       {},
       { withCredentials: true }
+
     );
 
     console.log("logout res", res);
@@ -98,6 +99,16 @@ function App() {
   } catch (err) {
     console.error("Logout failed", err);
     alert("Logout nahi hua bhai, thoda ruk ke try kar");
+  }
+};
+const takeMeToWebPageBtn = () => {
+  try {
+
+    console.log("Take me to web page btn clicked");
+    window.open("http://localhost:5173/app", "_blank");
+  }
+  catch (err) {
+    console.log("Take me to web page failed", err);
   }
 };
 
@@ -220,6 +231,13 @@ function App() {
           </div>
       <div className="header-actions no-drag flex items-center gap-2">
         <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Mute / Unmute">🔔</button>
+        <button
+            className="p-2 rounded-full hover:bg-neutral-700 transition"
+            title="Take me to web"
+            onClick={takeMeToWebPageBtn}
+          >
+            <ExternalLink size={18} />
+          </button>
         <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Pause">⏸️</button>
         <button onClick={logoutBtn} title="Logout" className="p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition">
           <Power size={18} />
