@@ -1,15 +1,44 @@
 {
   "name": "vitt-overlay-ui",
-  "version": "0.2.1",
-  "productName": "VITT Overlay",
-  "description": "Transparent overlay with Live Assist panel and toolbar",
-  "appId": "ai.vitt.overlay",
+  "version": "1.0.0",
+  "description": "Run on macOS: ```bash npm install npm run start ``` Hotkeys: - Toggle click-through: **⌥ + `** - Hide/Show: **⌥ ⇧ H** - Reload: **⌥ ⇧ R**",
   "main": "main.js",
+  "type": "module",
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@recallai/desktop-sdk": "^0.0.0-nightly.20251119T124827-8ab1a322fdabdfce4dcd9c305cd7371f2a8b75d3",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
+    "imagemagick-cli": "^0.5.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.VittAi.overlay",
+    "productName": "Overlay-Vitt",
+    "win": {
+      "target": "portable",
+      "icon": "build/vitt-logo.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.icns"
+    },
+    "directories": {
+      "output": "dist-mac"
+    }
   }
 }

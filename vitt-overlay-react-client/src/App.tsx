@@ -51,7 +51,7 @@ function TranscriptionList(){
   const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
   return (
     <div>
-    {transcriptions.map((e)=><Transcription e={e}/>)}
+    {transcriptions.map((e,i)=><Transcription e={e} key={i}/>)}
           {/* <div className="item">
             <div className="left i-indigo">💡</div>
             <div className="text">Suggest showing demo slide.</div>
@@ -123,7 +123,7 @@ function App() {
     console.log('App rendered hui');
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
   //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://f5b0f5d3689a.ngrok-free.app/ws'
+  const wsUrl = 'wss://9a7574c7b159.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
@@ -209,8 +209,8 @@ function App() {
       tempWs.send('Hello from the browser!');
 
       //setTimeout(())
-      wsRef.current = tempWs;
-      setWs(tempWs) // Send a message to the server
+     // wsRef.current = tempWs;
+     // setWs(tempWs) // Send a message to the server
     };
 
     // Event listener for incoming messages
@@ -252,7 +252,7 @@ function App() {
     return ()=>{ 
       wsRef.current && wsRef.current.close();
       //tempWs && tempWs.close();
-      setWs(null);
+      //setWs(null);
     }
   },[])
 
@@ -278,6 +278,8 @@ function App() {
   useEffect(()=>{
     if(!recallElectronAPI )
       return ;
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
    // console.log('overlay object in electron',window.overlay)
     window.overlay.somethingHappened((data)=>{
      
@@ -295,9 +297,9 @@ function App() {
         timestamp:getTimeStamp()
       }
       // ws.send(ob)
-      ws.send(JSON.stringify(ob))
+      wsRef.current.send(JSON.stringify(ob))
     })
-  
+  }
   },[ws])
 
   //console.log('VAD2', VAD2)
@@ -316,6 +318,10 @@ function App() {
     }
     return  <TranscriptionList/>
   }
+
+  // return (
+  //   <div>hello world</div>
+  // )
   return (
     <div className='drag-region'>
       <div className="card drag-region" id="card" >

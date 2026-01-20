@@ -7,7 +7,10 @@ contextBridge.exposeInMainWorld('overlay', {
   somethingHappened:(cb)=> ipcRenderer.on('something-happened',(_e,data)=>cb(data)),
   getRecallBuffer:(cb)=> {
     const subscription = (_event, data) => cb(data);
-    ipcRenderer.on('recall-buffer',(_e,data)=>cb(data))
+    //console.log("Subscribed to recall-buffer",data);
+    //(_e,data)=>cb(data)
+    ipcRenderer.on('recall-buffer',subscription)
+    
     return () => ipcRenderer.removeListener('recall-buffer', subscription);
   },
   quitApp: () => ipcRenderer.send('close-app')

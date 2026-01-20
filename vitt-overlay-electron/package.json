@@ -14,7 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@recallai/desktop-sdk": "^0.0.0-nightly.20251119T124827-8ab1a322fdabdfce4dcd9c305cd7371f2a8b75d3",
+    "@recallai/desktop-sdk": "^0.0.0-nightly.20250907T202737-fde5a79de5dcef76e03759993b52581277ec3010",
     "axios": "^1.12.2",
     "dotenv": "^17.2.3",
     "imagemagick-cli": "^0.5.0",
