@@ -279,7 +279,8 @@ function App() {
     if(!recallElectronAPI )
       return ;
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    //&& wsRef.current.readyState === WebSocket.OPEN
+    if (wsRef.current ) {
    // console.log('overlay object in electron',window.overlay)
     window.overlay.somethingHappened((data)=>{
      
