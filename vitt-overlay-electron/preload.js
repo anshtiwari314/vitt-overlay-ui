@@ -13,6 +13,14 @@ contextBridge.exposeInMainWorld('overlay', {
     
     return () => ipcRenderer.removeListener('recall-buffer', subscription);
   },
+  getMeetingId:(cb)=> {
+    const subscription = (_event, data) => cb(data);
+    //console.log("Subscribed to recall-buffer",data);
+    //(_e,data)=>cb(data)
+    ipcRenderer.on('current-window-id',subscription)
+    
+    return () => ipcRenderer.removeListener('current-window-id', subscription);
+  },
   quitApp: () => ipcRenderer.send('close-app')
 });
 

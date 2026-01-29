@@ -136,6 +136,8 @@ async function createDesktopSdkUpload() {
   return response.data;
 }
 async function startRecording(windowId) {
+  console.log("recording started", windowId);
+
   try {
     const { upload_token } = await createDesktopSdkUpload();
 
@@ -147,6 +149,8 @@ async function startRecording(windowId) {
       windowId: windowId,
       uploadToken: upload_token
     });
+
+    win.webContents.send('current-window-id', windowId);
   } catch (error) {
     if (error.response) {
       console.error("Response data:", error.response.data);
@@ -321,7 +325,7 @@ app.whenReady().then(() => {
   //   win.webContents.send("something-happened",counter++)
   // },3000)
   
-  console.log('recall',RecallAiSdk)
+  console.log('recall',RecallAiSdk);
 
   RecallAiSdk.addEventListener('permissions-granted', async (evt) => {
     console.log("Permissions granted, ready to record");

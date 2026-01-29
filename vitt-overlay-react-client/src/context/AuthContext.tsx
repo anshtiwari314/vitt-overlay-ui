@@ -19,7 +19,7 @@ export default function AuthContext({children}:{children:React.ReactNode}) {
      useEffect(() => {
   console.log("jaa rha")
   const refresh = async () => {
-    console.log("andar aaya");
+   // console.log("andar aaya");
     try {
      
       const res = await axios.get("http://localhost:5000/refresh", { withCredentials: true });
@@ -27,7 +27,7 @@ export default function AuthContext({children}:{children:React.ReactNode}) {
       setCurrentUser(res.data.user);
       
     } catch (err:any) {
-      console.log("problem in refresh kuch sussy hai");
+     // console.log("problem in refresh kuch sussy hai");
     }finally{
       setLoading(false)
     }

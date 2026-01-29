@@ -15,7 +15,8 @@ import {
   Pause,
   Mic,
   Key,
-  RefreshCw
+  RefreshCw,
+  Copy
 } from 'lucide-react';
 import { useData } from './context/DataWrapper'
 import {
@@ -119,11 +120,58 @@ function SinglePrompt({e}){
     </div>
   )
 }
+
+function UploadsTab({sdkState}){
+  console.log('uploads sdkState',sdkState)
+  const [selectedMeeting, setSelectedMeeting] = React.useState(null);
+
+   const RecordingStatusIcon = ({ status }) => {
+  const iconProps = {
+    strokeWidth: 2,
+    size: 24
+  };
+
+  switch (status) {
+    case 'completed':
+      return <CheckCircle2 {...iconProps} className="status-icon completed" />;
+    case 'failed':
+      return <AlertCircle {...iconProps} className="status-icon failed" />;
+    case 'in-progress':
+      return <UploadCloud {...iconProps} className="status-icon in-progress" />;
+    case 'paused':
+      return <Pause {...iconProps} className="status-icon paused" />;
+    default:
+      return null;
+  }
+};
+
+  return (
+    <div className="recordings-list">
+          {sdkState.meetings.map((meeting) => (
+            <div
+              key={meeting.id}
+              className={`recording-item ${selectedMeeting?.id === meeting.id ? 'selected' : ''}`}
+              onClick={() => setSelectedMeeting(meeting)}
+              style={{display:'flex',alignItems:'center',gap:'1rem',marginBottom:'1rem'}}
+            >
+              <RecordingStatusIcon status={meeting.status} />
+              <div className="recording-details">
+                <p className="recording-title">{meeting.title}</p>
+                <p className="recording-title">{meeting.id}</p>
+                <p className="recording-upload-progress">
+                  {meeting.uploadPercentage}% Uploaded
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+  )
+}
 function App() {
-    console.log('App rendered hui');
+   // console.log('App rendered hui');
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
-  //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://9a7574c7b159.ngrok-free.app/ws'
+  const wsUrl = 'ws://34.100.145.102/ws'
+  //const wsUrl = 'wss://9a7574c7b159.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
@@ -135,6 +183,9 @@ function App() {
     permissions_granted: true,
     meetings: [],
   });
+  
+
+
  const logoutBtn = async () => {
   try {
     console.log("logout btn clicked");
@@ -300,6 +351,11 @@ function App() {
       // ws.send(ob)
       wsRef.current.send(JSON.stringify(ob))
     })
+
+    window.overlay.getMeetingId((id)=>{
+      document.getElementById('meeting_id').innerText = `${id}`
+      
+    })
   }
   },[ws])
 
@@ -316,6 +372,8 @@ function App() {
       return <TranscriptionList />
     }else if (selectedTab === 'prompts') {
       return <PromptList/>
+    }else if (selectedTab === 'uploads') {
+      return <UploadsTab  sdkState={sdkState}/>
     }
     return  <TranscriptionList/>
   }
@@ -323,6 +381,22 @@ function App() {
   // return (
   //   <div>hello world</div>
   // )
+
+  function copyToClipboard(){
+    const text = document.getElementById('meeting_id')?.innerText;
+    navigator.clipboard.writeText(text)
+    .then(() => {
+      // Success message (optional)
+      console.log('Text copied to clipboard');
+      alert('Copied the text: ' + text);
+    })
+    .catch(err => {
+      // Error handling
+      console.error('Could not copy text: ', err);
+    })
+  }
+
+
   return (
     <div className='drag-region'>
       <div className="card drag-region" id="card" >
@@ -361,6 +435,11 @@ function App() {
         </div>
         } */}
 
+      
+      <section className="status-bar no-drag" style={{display:'flex',justifyContent:'space-around'}}>
+          <p id="meeting_id" style={{fontSize:'0.8rem'}}></p>
+          <div onClick={copyToClipboard} ><Copy size={20}/></div>
+      </section>
       <section className="control-panel no-drag">
           {
             sdkState.permissions_granted ?
@@ -413,6 +492,15 @@ function App() {
           //  style={{color:selectedTab==='transcript'?'white':'rgba(0,0,0,0.5)'}}
             >Transcript</div>
           </button>
+          <button className="tool"
+            onClick={()=>setSelectedTab('uploads')}
+            style={{backgroundColor:selectedTab==='uploads'?'rgba(0,0,0,0.25)':'transparent'}}
+          >
+            <div className="t-ic">🤖</div>
+            <div className="t-txt" 
+           // style={{color:'rgba(0,0,0,0.5)'}}
+            >Uploads</div>
+          </button>
           <button className="tool">
             <div className="t-ic">🤖</div>
             <div className="t-txt" 
@@ -428,10 +516,10 @@ function App() {
            // style={{color:selectedTab==='prompts'?'white':'rgba(0,0,0,0.5)'}}
             >Prompts</div>
           </button>
-          <button className="tool">
+          {/* <button className="tool">
             <div className="t-ic">⚙️</div>
             <div className="t-txt">Settings</div>
-          </button>
+          </button> */}
         </div>
 
         <div className="state no-drag">Click-through: <b id="state">ON</b> • Toggle with <span className="kbd">⌥ + `</span></div>
