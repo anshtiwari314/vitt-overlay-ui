@@ -1,0 +1,365 @@
+/* App3 – Professional UI & Fixes */
+
+/* ---------------------------------------------------------------------------
+   Theme Variables
+   --------------------------------------------------------------------------- */
+.card.app3-card {
+  /* Default / Transparent Theme */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --font-sans: "Inter", system-ui, sans-serif;
+  
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  
+  --bg-glass: rgba(20, 20, 23, 0.75);
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.1);
+  --text-main: rgba(255, 255, 255, 0.95);
+  --text-muted: rgba(255, 255, 255, 0.6);
+  
+  --accent: #74ffa0;
+  --danger: #ff5c5c;
+  
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  font-family: var(--font-sans);
+  color: var(--text-main);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+
+/* Dark Theme Overrides */
+.card.app3-card[data-theme="dark"] {
+  --bg-glass: #121212; /* Solid dark */
+  --surface: #1e1e1e;
+  --surface-hover: #2a2a2a;
+  --border-glass: rgba(255, 255, 255, 0.15);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 0 0 1px rgba(0,0,0,1); /* Extra definition */
+}
+
+/* ---------------------------------------------------------------------------
+   Header
+   --------------------------------------------------------------------------- */
+.app3-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid transparent;
+}
+
+.app3-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.app3-title .dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(116, 255, 160, 0.5);
+}
+
+.app3-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.btn-icon.danger:hover {
+  background: rgba(255, 92, 92, 0.15);
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------
+   Status & Info
+   --------------------------------------------------------------------------- */
+.status-section {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.meeting-id-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  font-family: monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.meeting-id-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-btn {
+  padding: 4px;
+  margin-left: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.copy-btn:hover { background: var(--surface-hover); color: var(--text-main); }
+
+/* Meeting Detected Card */
+.meeting-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.meeting-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 8px;
+  padding: 4px;
+}
+.meeting-icon img { width: 100%; height: 100%; object-fit: contain; }
+
+.meeting-details { display: flex; flex-direction: column; }
+.meeting-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
+.meeting-platform { font-size: 13px; font-weight: 600; color: var(--text-main); }
+
+/* ---------------------------------------------------------------------------
+   Controls
+   --------------------------------------------------------------------------- */
+.controls-section {
+  flex-shrink: 0;
+  display: flex;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.btn-primary {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary.recording {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(255, 92, 92, 0.05);
+}
+
+/* ---------------------------------------------------------------------------
+   List / Content
+   --------------------------------------------------------------------------- */
+.content-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-right: 4px; /* Scrollbar space */
+}
+
+/* Scrollbar */
+.content-list::-webkit-scrollbar { width: 6px; }
+.content-list::-webkit-scrollbar-track { background: transparent; }
+.content-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.content-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* Items */
+.transcription-card {
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.transcription-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.transcription-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-main);
+  word-wrap: break-word; /* Ensure wrapping */
+  white-space: pre-wrap;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------------------------------------------------------------------------
+   Footer (Tabs)
+   --------------------------------------------------------------------------- */
+.tab-bar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-glass);
+}
+
+.tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: transparent;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.tab-btn.active {
+  background: var(--surface-hover);
+  color: var(--text-main);
+  /* border-color: var(--border-glass); */
+}
+
+.tab-icon { font-size: 18px; }
+.tab-label { font-size: 10px; font-weight: 600; text-transform: uppercase; }
+
+/* ---------------------------------------------------------------------------
+   Toast & Bottom
+   --------------------------------------------------------------------------- */
+.toast-container {
+  position: absolute;
+  bottom: 60px; /* Above footer */
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.toast {
+  background: #10b981; /* Success green */
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.bottom-hint {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  opacity: 0.5;
+}

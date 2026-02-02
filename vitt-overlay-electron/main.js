@@ -105,7 +105,7 @@ async function createDesktopSdkUpload() {
       type: "desktop_sdk_callback",
       //type: "websocket",
       //url:'ws://34.100.145.102/ws',
-      //url:'wss://50ac0bd1a852.ngrok-free.app/ws',
+      //url:'wss://b6ff8fd3aac1.ngrok-free.app/ws',
       events: ["audio_mixed_raw.data"]
       //events: ["audio_participant_raw.data"]
     },
@@ -171,8 +171,9 @@ async function startRecording(windowId) {
 
 
 function createWindow () {
-  const width = 420;
-  const height = 550;
+  const width = 380;
+  //const height = 550;
+  const height = 600;
 
   win = new BrowserWindow({
     width,
@@ -180,7 +181,8 @@ function createWindow () {
     
     frame: false,
     transparent: true,
-
+    //backgroundColor: '#2e2c29',
+    backgroundColor: '#00000000',
     hasShadow: true,
     alwaysOnTop: false,
     resizable: true,
@@ -206,7 +208,7 @@ function createWindow () {
   //win.setIgnoreMouseEvents(true, { forward: true });
   //win.loadFile('index.html');
   win.loadURL('http://localhost:5173');
-  win.webContents.openDevTools()
+  //win.webContents.openDevTools()
 
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
@@ -412,6 +414,8 @@ app.whenReady().then(() => {
     console.log("MEETING DETECTED", evt);
     detectedMeeting = evt;
 
+    win.webContents.send('meeting-detected', evt);
+
     let notif = new Notification({
       title: 'Meeting detected',
       body: 'Click here to record the meeting.',
@@ -476,6 +480,12 @@ app.whenReady().then(() => {
     //console.log('app is now closed');
     app.quit();
 });
+  ipcMain.on('minimize-app', () => {
+    if (win) win.minimize();
+  });
+  ipcMain.on('open-external', (event, url) => {
+    shell.openExternal(url);
+  });
   ipcMain.on('message-from-renderer', async (event, arg) => {
     console.log('message-from-renderer', arg);
     switch (arg.command) {

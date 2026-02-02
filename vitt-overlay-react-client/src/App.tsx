@@ -5,7 +5,7 @@ import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
-import { Power } from "lucide-react";
+import { Power,X } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import parse from 'html-react-parser';
 import {
@@ -16,7 +16,10 @@ import {
   Mic,
   Key,
   RefreshCw,
-  Copy
+  Copy,
+  SunMoon,
+  SunMedium,
+  Link2
 } from 'lucide-react';
 import { useData } from './context/DataWrapper'
 import {
@@ -47,6 +50,9 @@ import { EntypoMic,EntypoModernMic} from "react-entypo";
 import { getTimeStamp } from './functions/generalFn'
 import axios from 'axios'
 import { addPrompt } from './redux/reducers/promptsReducer'
+import GMeetIcon from './assets/g-meet.png'
+import ZoomIcon from './assets/zoom.png'
+import TeamsIcon from './assets/teams.png'
 
 function TranscriptionList(){
   const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
@@ -170,11 +176,13 @@ function UploadsTab({sdkState}){
 function App() {
    // console.log('App rendered hui');
   const recallElectronAPI = window.electronAPI?.ipcRenderer;
-  const wsUrl = 'ws://34.100.145.102/ws'
-  //const wsUrl = 'wss://9a7574c7b159.ngrok-free.app/ws'
+  //const wsUrl = 'ws://34.100.145.102/ws'
+  const wsUrl = 'wss://b6ff8fd3aac1.ngrok-free.app/ws'
 
   const [count, setCount] = useState(0)
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
+  const [theme,setTheme] = useState('transparent') //dark, transparent;
+  const [meetingDetected,setMeetingDetected] = useState({});
   const [sdkState, setSdkState] = React.useState({
     bot_id: null,
     recording: false,
@@ -356,6 +364,11 @@ function App() {
       document.getElementById('meeting_id').innerText = `${id}`
       
     })
+
+    window.overlay.meetingDetected((e)=>{
+      console.log('meeting detected in overlay',e)
+      setMeetingDetected(e.window)
+    })
   }
   },[ws])
 
@@ -396,6 +409,159 @@ function App() {
     })
   }
 
+  function toggleTheme(){
+    document.body.style.backgroundColor = theme==='dark' ? 'transparent' : 'black';
+    setTheme(p=>p==='dark'?'transparent':'dark');
+
+  }
+const buttonStyle = {
+  backgroundColor: '#333',
+  border: 'none',
+  borderRadius: '6px',
+  color: '#eee',
+  padding: '6px 12px',
+  cursor: 'pointer',
+  fontSize: '11px',
+  fontWeight: 'bold',
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'background 0.2s'
+};
+
+const meetingDetectedContainerStyle = {
+  display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '8px 16px',
+      backgroundColor: '#1e1e1e', // Dark theme card
+      borderRadius: '12px',
+      border: '1px solid #333',
+      width: '100%',
+      maxWidth: '450px',
+      color: '#fff',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      margin:'0 auto'
+}
+  function renderMeetingDetected(meeting){
+    switch(meeting?.platform){
+      case 'zoom':
+        return (
+          <div style={meetingDetectedContainerStyle}>
+      {/* Left Section: Context */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          backgroundColor: '#2a2a2a',
+          padding: '8px',
+          borderRadius: '8px',
+          display: 'flex'
+        }}>
+          <img src={ZoomIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Zoom</p>
+        </div>
+      </div>
+
+      {/* Right Section: Actions */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button 
+          onClick={() => copyToClipboard(meeting?.id)}
+          style={buttonStyle}
+          title="Copy Meeting ID"
+        >
+          ID
+        </button>
+        <button 
+          onClick={() => copyToClipboard(meeting?.url)}
+          style={{ ...buttonStyle, color: '#d51a1a' }}
+          title="Copy Meeting Link"
+        >
+          <Link2 size={18} />
+        </button>
+      </div>
+    </div>
+        )
+      case 'google-meet':
+        return (
+          <div style={meetingDetectedContainerStyle}>
+      {/* Left Section: Context */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          backgroundColor: '#2a2a2a',
+          padding: '8px',
+          borderRadius: '8px',
+          display: 'flex'
+        }}>
+          <img src={GMeetIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Google Meet</p>
+        </div>
+      </div>
+
+      {/* Right Section: Actions */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button 
+          onClick={() => copyToClipboard(meeting?.id)}
+          style={buttonStyle}
+          title="Copy Meeting ID"
+        >
+          ID
+        </button>
+        <button 
+          onClick={() => copyToClipboard(meeting?.url)}
+          style={{ ...buttonStyle, color: '#d51a1a' }}
+          title="Copy Meeting Link"
+        >
+          <Link2 size={18} />
+        </button>
+      </div>
+    </div>
+            )
+      case 'teams':
+        return (
+          <div style={meetingDetectedContainerStyle}>
+      {/* Left Section: Context */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          backgroundColor: '#2a2a2a',
+          padding: '8px',
+          borderRadius: '8px',
+          display: 'flex'
+        }}>
+          <img src={TeamsIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Teams</p>
+        </div>
+      </div>
+
+      {/* Right Section: Actions */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button 
+          onClick={() => copyToClipboard(meeting?.id)}
+          style={buttonStyle}
+          title="Copy Meeting ID"
+        >
+          ID
+        </button>
+        <button 
+          onClick={() => copyToClipboard(meeting?.url)}
+          style={{ ...buttonStyle, color: '#d51a1a' }}
+          title="Copy Meeting Link"
+        >
+          <Link2 size={18} />
+        </button>
+      </div>
+    </div>
+            )
+      default:
+        return null;
+    }
+  }
 
   return (
     <div className='drag-region'>
@@ -406,6 +572,16 @@ function App() {
             <span>Vitt Overlay</span>
           </div>
       <div className="header-actions no-drag flex items-center gap-2">
+        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Settings" onClick={toggleTheme}>
+          {
+            theme==='dark' ?
+            <SunMedium strokeWidth={2} color="white" size={20}/>
+            :
+            <SunMoon strokeWidth={2} color={"white"} size={20}/>
+          }
+          {/* <SunMedium strokeWidth={2} color="#f0f0f0" size={20}/>
+          <SunMoon strokeWidth={2} color={"#f0f0f0"} size={20}/> */}
+        </button>
         <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Notifications">🔔</button>
         <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Quit" onClick={closeApp} style={{fontSize:'0.85rem'}}>❌</button>
         <button onClick={logoutBtn} title="Logout" className="p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition">
@@ -439,6 +615,9 @@ function App() {
       <section className="status-bar no-drag" style={{display:'flex',justifyContent:'space-around'}}>
           <p id="meeting_id" style={{fontSize:'0.8rem'}}></p>
           <div onClick={copyToClipboard} ><Copy size={20}/></div>
+      </section>
+      <section className="status-bar no-drag" style={{display:'flex',justifyContent:'space-around'}}>
+          {renderMeetingDetected(meetingDetected)}
       </section>
       <section className="control-panel no-drag">
           {
@@ -476,6 +655,15 @@ function App() {
                   <Pause strokeWidth={2} size={20} />
                   Pause
                 </button>
+                  {/* <button
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
+                 
+                >
+                  
+                  
+                  
+                </button> */}
+
               </div>
             :
             <div className="recording-controls">Permissions haven't been granted yet! Please do so in Settings.</div>

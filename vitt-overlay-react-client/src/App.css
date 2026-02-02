@@ -5,7 +5,10 @@ body{
    color:white;
    z-index:5; */
    /* height:80vh;*/
+width: 380px;
     background-color: transparent;
+    overflow: hidden;
+    border-radius: 18px;
 }
 button, a, input {
   /* -webkit-app-region: no-drag; */

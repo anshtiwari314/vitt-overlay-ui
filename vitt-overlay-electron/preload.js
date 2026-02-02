@@ -21,7 +21,15 @@ contextBridge.exposeInMainWorld('overlay', {
     
     return () => ipcRenderer.removeListener('current-window-id', subscription);
   },
-  quitApp: () => ipcRenderer.send('close-app')
+  meetingDetected:(cb)=> {
+    const subscription = (_event, data) => cb(data);
+
+    ipcRenderer.on('meeting-detected',subscription)
+    return () => ipcRenderer.removeListener('meeting-detected', subscription);
+  },
+  quitApp: () => ipcRenderer.send('close-app'),
+  minimizeApp: () => ipcRenderer.send('minimize-app'),
+  openExternal: (url) => ipcRenderer.send('open-external', url)
 });
 
 contextBridge.exposeInMainWorld('electronAPI',{
