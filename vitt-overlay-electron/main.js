@@ -208,7 +208,7 @@ function createWindow () {
   //win.setIgnoreMouseEvents(true, { forward: true });
   //win.loadFile('index.html');
   win.loadURL('http://localhost:5173');
-  //win.webContents.openDevTools()
+  win.webContents.openDevTools()
 
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
@@ -414,7 +414,10 @@ app.whenReady().then(() => {
     console.log("MEETING DETECTED", evt);
     detectedMeeting = evt;
 
-    win.webContents.send('meeting-detected', evt);
+    setTimeout(() => {
+      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed())
+        win.webContents.send('meeting-detected', evt);
+    }, 500);
 
     let notif = new Notification({
       title: 'Meeting detected',

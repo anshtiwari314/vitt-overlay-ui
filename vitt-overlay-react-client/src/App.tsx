@@ -183,6 +183,8 @@ function App() {
   const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
   const [theme,setTheme] = useState('transparent') //dark, transparent;
   const [meetingDetected,setMeetingDetected] = useState({});
+  const {authServerUrl} = useData();
+  
   const [sdkState, setSdkState] = React.useState({
     bot_id: null,
     recording: false,
@@ -199,7 +201,7 @@ function App() {
     console.log("logout btn clicked");
 
     const res = await axios.post(
-      "http://localhost:5000/logout",
+      `${authServerUrl}/logout`,
       {},
       { withCredentials: true }
     );

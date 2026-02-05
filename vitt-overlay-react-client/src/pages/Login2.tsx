@@ -3,6 +3,7 @@ import { useState } from "react"
 import { Lock, Mail, ArrowRight, User } from "lucide-react"
 import axios from "axios"
 import { useAuth } from "../context/AuthContext"
+import { useData } from "../context/DataWrapper"
 
 const GOOGLE_CLIENT_ID = "382932316402-4sopjcnfn116nb2nqqa1e32gnjjsuddh.apps.googleusercontent.com"
 const REDIRECT_URI = "http://localhost:8000/google/callback"
@@ -20,13 +21,16 @@ export default function MiniLoginPage() {
   const [signupPassword, setSignupPassword] = useState("")
   const [signupName, setSignupName] = useState("")
   const [forgotEmail, setForgotEmail] = useState("")
+  //const {authServerUrl} = useData();
+  const authServerUrl = "https://fb84-2401-4900-8829-9012-f44f-b9c8-c316-e49e.ngrok-free.app"
 
   const submitLoginBtn = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     try {
       setIsLoading(true)
+      console.log("authServerUrl", authServerUrl)
       const res = await axios.post(
-        "http://localhost:5000/login-web-portal",
+        `${authServerUrl}/login-web-portal`,
         { email, password },
         {
           headers: { "Content-Type": "application/json" },

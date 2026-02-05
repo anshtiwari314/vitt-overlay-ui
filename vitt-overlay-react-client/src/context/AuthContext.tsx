@@ -12,17 +12,20 @@ export function useAuth(){
 export default function AuthContext({children}:{children:React.ReactNode}) {
   
    const [currentUser,setCurrentUser] = useState({userid:'vois',sessionuid:uuidv4()})
-  // const [currentUser,setCurrentUser] = useState<any>(null);
+   //const [currentUser,setCurrentUser] = useState<any>(null);
    const [isAuthenticated,setIsAuthenticated] = useState(false)
    const [access_token,setaccess_token]=useState("")
    const [loading,setLoading]=useState(true)
+
+   const authServerUrl = "https://fb84-2401-4900-8829-9012-f44f-b9c8-c316-e49e.ngrok-free.app"
+
      useEffect(() => {
   console.log("jaa rha")
   const refresh = async () => {
    // console.log("andar aaya");
     try {
      
-      const res = await axios.get("http://localhost:5000/refresh", { withCredentials: true });
+      const res = await axios.post(`${authServerUrl}/refresh`, { withCredentials: true });
       setaccess_token(res.data.access_token);
       setCurrentUser(res.data.user);
       
