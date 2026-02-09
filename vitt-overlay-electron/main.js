@@ -30,7 +30,7 @@ let state = {
 };
 let counter = 0
 
-console.log('env',process.env.RECALLAI_API_URL,process.env.RECALLAI_API_KEY)
+//console.log('env',process.env.RECALLAI_API_URL,process.env.RECALLAI_API_KEY)
 
 function sendState() {
   //console.log('sendState triggeres')
@@ -94,12 +94,15 @@ async function createDesktopSdkUpload() {
   //   ]
   // }
   
+  // latest one
     "recording_config": {
     // user_data: {
     //         projectId: "ABC-123",
     //         userId: "USER-987",
     //         customTag: "production-meeting"
     //     },
+    video_mixed_mp4: null,
+    audio_mixed_mp3: {},
     realtime_endpoints: [
     {
       type: "desktop_sdk_callback",
@@ -149,6 +152,13 @@ async function startRecording(windowId) {
       windowId: windowId,
       uploadToken: upload_token
     });
+
+    await RecallAiSdk.requestPermission("accessibility");
+    await RecallAiSdk.requestPermission("microphone system-audio");
+    await RecallAiSdk.requestPermission("system-audio");
+    //await RecallAiSdk.requestPermission("screen-capture");
+
+    console.log("Permissions requested");
 
     win.webContents.send('current-window-id', windowId);
   } catch (error) {
@@ -329,6 +339,11 @@ app.whenReady().then(() => {
   
   console.log('recall',RecallAiSdk);
 
+  RecallAiSdk.addEventListener('permission-status',async  (evt) => {
+    const { permission, status } = evt
+    console.log(`Permission: ${permission}, Status: ${status}`)
+  })
+
   RecallAiSdk.addEventListener('permissions-granted', async (evt) => {
     console.log("Permissions granted, ready to record");
     state.permissions_granted = true;
@@ -343,7 +358,7 @@ app.whenReady().then(() => {
 
   RecallAiSdk.addEventListener('realtime-event', async (evt) => {
     //evt.data.data.buffer = ''
-    console.log('realtime event',evt.data.data.timestamp);
+    console.log('realtime event',evt);
     
     win.webContents.send('recall-buffer', evt);
     
@@ -472,12 +487,16 @@ app.whenReady().then(() => {
       console.error(e);
     }
   });
-
+  
   RecallAiSdk.init({
     api_url: process.env.RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ["microphone", "accessibility", "screen-capture"],
-    config: {}
+    acquirePermissionsOnStartup: ["microphone", "accessibility", "system-audio"],
+    config: {},
+    restartOnError: true
   });
+
+
+  
 
   ipcMain.on('close-app', () => {
     //console.log('app is now closed');
