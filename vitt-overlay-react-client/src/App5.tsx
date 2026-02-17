@@ -396,7 +396,11 @@ export default function App5() {
       tempWs = new WebSocket(wsUrl)
       app5SharedWs = tempWs
       ref.current = tempWs
-      tempWs.onopen = () => tempWs.send('Hello from browser!')
+      tempWs.onopen = () => {
+        tempWs.send('Hello from browser!')
+
+        tempWs.send({type:'create-desktop-sdk-upload'})
+      }
       tempWs.onmessage = (event: MessageEvent) => {
         try {
           const result = JSON.parse(event.data as string) as Record<string, unknown>
@@ -436,6 +440,7 @@ export default function App5() {
     if (!recallElectronAPI || !(window as unknown as { overlay?: unknown }).overlay) return
     const overlay = (window as unknown as { overlay: { getRecallBuffer: (cb: (d: unknown) => void) => () => void; getMeetingId: (cb: (id: string) => void) => () => void; meetingDetected: (cb: (e: { window?: { id: string; platform: string; url?: string } }) => void) => () => void } }).overlay
     const unsubBuffer = overlay.getRecallBuffer((data: unknown) => {
+      console.log('recall-buffer',data)
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({

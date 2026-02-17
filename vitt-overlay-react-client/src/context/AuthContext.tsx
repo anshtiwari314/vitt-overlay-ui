@@ -20,7 +20,7 @@ export default function AuthContext({children}:{children:React.ReactNode}) {
    const authServerUrl = "https://fb84-2401-4900-8829-9012-f44f-b9c8-c316-e49e.ngrok-free.app"
 
      useEffect(() => {
-  console.log("jaa rha")
+  //console.log("jaa rha")
   const refresh = async () => {
    // console.log("andar aaya");
     try {
