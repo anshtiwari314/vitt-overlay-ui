@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import './App.css'
 import './App5.css'
-import { addTranscription } from './redux/reducers/TranscriptionReducer'
+import { addTranscription, addRealtimeTranscription } from './redux/reducers/TranscriptionReducer'
 import { addPrompt } from './redux/reducers/promptsReducer'
 import { addOutgoingMessage, addIncomingMessages } from './redux/reducers/chatWithAIReducer'
 import parse from 'html-react-parser'
@@ -54,6 +54,43 @@ function TranscriptionItem({ e }: { e: { speaker?: string; transcription: string
       <div className="transcription-text">{e.transcription}</div>
     </div>
   )
+}
+
+function RealtimeTranscriptionList() {
+    const realtimeTranscriptions = useSelector((state: { transcriptionReducer: { realtimeTranscriptions: any[] } }) => state.transcriptionReducer.realtimeTranscriptions)
+    
+    // Auto-scroll to bottom ref
+    const bottomRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [realtimeTranscriptions]);
+
+    return (
+      <div className="content-list">
+        {realtimeTranscriptions.map((e, i) => (
+          <RealtimeTranscriptionItem e={e} key={i} />
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    )
+}
+  
+function RealtimeTranscriptionItem({ e }: { e: { participantName?: string; participantId?: string | number; isHost?: boolean; text: string; provider?: string } }) {
+    return (
+      <div className="transcription-card">
+        <div className="transcription-header" style={{display:'flex', flexDirection:'column', gap: '4px'}}>
+             <div style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'13px'}}>
+                <span style={{fontWeight:'bold'}}>{e.participantName || 'Unknown'}</span>
+                {e.isHost && <span style={{fontSize:'12px', color:'var(--text-muted)'}}>is_HOST: true</span>}
+                {e.provider && <span style={{fontSize:'12px', color:'var(--text-muted)'}}>provider: {e.provider}</span>}
+             </div>
+             <div style={{fontSize:'12px', color:'var(--text-muted)'}}>
+                ID: {e.participantId}
+             </div>
+        </div>
+        <div className="transcription-text" style={{marginTop:'8px'}}>{e.text}</div>
+      </div>
+    )
 }
 
 function PromptList() {
@@ -339,12 +376,13 @@ function SettingsTab({
 
 // --- Main App Component ---
 
-export default function App5() {
+export default function App6() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
   const wsUrl = 'ws://34.100.145.102/ws'
-  //const wsUrl = 'ws://192.168.1.35:8080/';
-  //const wsUrl = 'wss://abdb2e4353fb.ngrok-free.app/ws'
-  const [selectedTab, setSelectedTab] = useState('transcript')
+  const [selectedTab, setSelectedTab] = useState('realtime') // Default to realtime
+  const [selectedProvider, setSelectedProvider] = useState('deepgram')
+  const selectedProviderRef = useRef(selectedProvider)
+  useEffect(() => { selectedProviderRef.current = selectedProvider }, [selectedProvider])
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
   const [copyToast, setCopyToast] = useState(false)
@@ -398,7 +436,6 @@ export default function App5() {
       ref.current = tempWs
       tempWs.onopen = () => {
         tempWs.send('Hello from browser!')
-
         tempWs.send({type:'create-desktop-sdk-upload'})
       }
       tempWs.onmessage = (event: MessageEvent) => {
@@ -439,18 +476,31 @@ export default function App5() {
   useEffect(() => {
     if (!recallElectronAPI || !(window as unknown as { overlay?: unknown }).overlay) return
     const overlay = (window as unknown as { overlay: { getRecallBuffer: (cb: (d: unknown) => void) => () => void; getMeetingId: (cb: (id: string) => void) => () => void; meetingDetected: (cb: (e: { window?: { id: string; platform: string; url?: string } }) => void) => () => void } }).overlay
-    const unsubBuffer = overlay.getRecallBuffer((data: unknown) => {
-      console.log('recall-buffer',data)
+    const unsubBuffer = overlay.getRecallBuffer((data: any) => {
+      // console.log('recall-buffer',data)
+      try {
+        // data structure expected: { data: { event: "transcript.data", data: { participant: {id,name,is_host}, words: [...] } } }
+        const payload = data?.data?.data;
+        if (payload && payload.words && payload.participant) {
+            const text = payload.words.map((w:any) => w.text).join(' ');
+            // Note: selectedProvider from state might be stale here due to closure.
+            // However, since we need it, we can use a ref or rely on the user not switching rapidly mid-sentence.
+            // A better way is to include provider in the backend event or use a ref for selectedProvider.
+            // For now, let's use a ref for selectedProvider to access current value in callback.
+             dispatchRef.current(addRealtimeTranscription({
+                text,
+                participantName: payload.participant.name,
+                participantId: payload.participant.id,
+                isHost: payload.participant.is_host,
+                provider: selectedProviderRef.current
+            }));
+        }
+      } catch (e) {
+        console.error("Error processing recall buffer", e);
+      }
+      
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        // wsRef.current.send(
-        //   JSON.stringify({
-        //     type: 'recall-buffer',
-        //     userid: currentUserRef.current?.id ?? (currentUserRef.current as { userid?: string })?.userid,
-        //     sessionid: sessionuidRef.current,
-        //     data,
-        //     timestamp: getTimeStamp()
-        //   })
-        // )
+        // wsRef.current.send(...)
       }
     })
     const unsubMeetingId = overlay.getMeetingId((id: string) => {
@@ -502,6 +552,12 @@ export default function App5() {
 
   const openDashboard = () => {
     openExternal('http://vitt-health-insurance.netlify.app/')
+  }
+  
+  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newVal = e.target.value
+    setSelectedProvider(newVal)
+    recallElectronAPI?.send('message-from-renderer', { command: 'change-provider', provider: newVal })
   }
 
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
@@ -590,6 +646,24 @@ export default function App5() {
         </div>
 
         <div className="status-section no-drag">
+          <div className="provider-selector" style={{marginBottom: 8}}>
+            <select 
+                value={selectedProvider} 
+                onChange={handleProviderChange}
+                style={{
+                    width: '100%',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid var(--border-glass)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px'
+                }}
+            >
+                <option value="deepgram">Deepgram</option>
+                <option value="assemblyai">AssemblyAI</option>
+            </select>
+          </div>
           {meetingId && (
             <div className="meeting-id-box">
               <span id="meeting_id" className="meeting-id-text">
@@ -635,7 +709,8 @@ export default function App5() {
         )}
 
         <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {selectedTab === 'transcript' && <TranscriptionList />}
+          {selectedTab === 'realtime' && <RealtimeTranscriptionList />}
+          {/* {selectedTab === 'transcript' && <TranscriptionList />} */}
           {selectedTab === 'prompts' && <PromptList />}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
           {selectedTab === 'chat' && (
@@ -647,7 +722,8 @@ export default function App5() {
         </div>
 
         <div className="tab-bar no-drag">
-          <TabButton active={selectedTab === 'transcript'} onClick={() => setSelectedTab('transcript')} icon="📝" label="Transcript" />
+          <TabButton active={selectedTab === 'realtime'} onClick={() => setSelectedTab('realtime')} icon="🎙️" label="Realtime" />
+          {/* <TabButton active={selectedTab === 'transcript'} onClick={() => setSelectedTab('transcript')} icon="📝" label="Transcript" /> */}
           <TabButton active={selectedTab === 'uploads'} onClick={() => setSelectedTab('uploads')} icon="☁️" label="Uploads" />
           <TabButton active={selectedTab === 'chat'} onClick={() => setSelectedTab('chat')} icon="🤖" label="AI Chat" />
           <TabButton active={selectedTab === 'prompts'} onClick={() => setSelectedTab('prompts')} icon="📊" label="Prompts" />

@@ -305,7 +305,7 @@ let initialLoadState = [
 
 let transcriptionSlice = createSlice({
     name:'transcriptionSlice',
-    initialState:{transcriptions:[]},
+    initialState:{transcriptions:[], realtimeTranscriptions: []},
     reducers:{
         addTranscription:(state,action)=>{
             //console.log('add Transcription triggers',state,action)
@@ -317,11 +317,25 @@ let transcriptionSlice = createSlice({
             state.transcriptions = [tempObj,...state.transcriptions]
             console.log('after modifying state',current(state))
             return state;
+        },
+        addRealtimeTranscription: (state, action) => {
+            const { text, participantName, participantId, isHost, provider } = action.payload;
+            state.realtimeTranscriptions = [
+                ...state.realtimeTranscriptions,
+                {
+                    text,
+                    participantName,
+                    participantId,
+                    isHost,
+                    provider,
+                    timestamp: new Date().toISOString()
+                }
+            ];
         }
     }
 })
 
-export const {addTranscription } = transcriptionSlice.actions;
+export const {addTranscription, addRealtimeTranscription } = transcriptionSlice.actions;
 
 export default transcriptionSlice.reducer
 

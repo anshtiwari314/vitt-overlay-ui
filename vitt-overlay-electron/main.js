@@ -23,6 +23,7 @@ let isClickThrough = true;
 let tray;
 
 let detectedMeeting = null
+let currentProvider = 'deepgram';
 let state = {
   recording: false,
   permissions_granted: true,
@@ -63,73 +64,50 @@ function getFormattedDate() {
 async function createDesktopSdkUpload() {
   const url = `${process.env.RECALLAI_API_URL}/api/v1/sdk-upload/`;
 
-  const response = await axios.post(url, {
-
-  // recording_config: {
-  //   "transcript": {
-  //     "provider": {
-  //       "recallai_streaming": {}
-  //     },
-  //     "diarization": {
-  //       "use_separate_streams_when_available": false
-  //     }
-  //   },
-  //   "realtime_endpoints": [
-  //     {
-  //       "type": "webhook",
-  //       "url": "https://2af348a85290.ngrok-free.app/get-data",
-  //       "events": ["transcript.data", "transcript.partial_data"]
-  //     }
-  //   ]
-  // }
-
-  // recording_config: {
-  //   "audio_separate_raw": {}, 
-  //   "realtime_endpoints": [
-  //     {
-  //     	type: "websocket", 
-  //       url:  "wss://2af348a85290.ngrok-free.app",
-  //       events: ["audio_separate_raw.data"]
-  //     }
-  //   ]
-  // }
-  
-  // latest one
-    "recording_config": {
-    // user_data: {
-    //         projectId: "ABC-123",
-    //         userId: "USER-987",
-    //         customTag: "production-meeting"
-    //     },
-    video_mixed_mp4: null,
-    audio_mixed_mp3: {},
-    realtime_endpoints: [
-    {
-      type: "desktop_sdk_callback",
-      //type: "websocket",
-      //url:'ws://34.100.145.102/ws',
-      //url:'wss://b6ff8fd3aac1.ngrok-free.app/ws',
-      events: ["audio_mixed_raw.data"]
-      //events: ["audio_participant_raw.data"]
-    },
-  ],
+  let recording_config = {};
+  if (currentProvider === 'deepgram') {
+    recording_config = {
+      "transcript": {
+        "provider": {
+          "deepgram_streaming": {
+            // "model": "nova-2",
+            // "language": "en",
+            // "punctuate": true,
+            // "smart_format": true,
+            // "diarize": true
+          }
+        }
+      },
+      "realtime_endpoints": [
+        {
+          "type": "desktop_sdk_callback",
+          "events": [
+            "transcript.partial_data",
+            "transcript.data"
+          ]
+        }
+      ]
+    };
+  } else if (currentProvider === 'assemblyai') {
+    recording_config = {
+      "transcript": {
+        "provider": {
+          "assembly_ai_v3_streaming": {
+            // any additional AssemblyAI real-time params
+          }
+        }
+      },
+      "realtime_endpoints": [
+        {
+          "type": "desktop_sdk_callback",
+          "events": ["transcript.data", "transcript.partial_data"]
+        }
+      ]
+    };
   }
 
-  // "recording_config": {
-  //   "transcript": {
-  //     "provider": {
-  //       //"recallai_streaming": {}
-  //       "deepgram_streaming": {}
-  //     }
-  //   },
-  //   "realtime_endpoints": [
-  //     {
-  //       "type": "websocket",
-  //       "url": "wss://c93e54c5614f.ngrok-free.app/",
-  //       "events": ["transcript.data"]
-  //     }
-  //   ]
-  // }
+  const response = await axios.post(url, {
+    recording_config,
 }, {
     headers: { 'Authorization': `Token ${process.env.RECALLAI_API_KEY}` },
 
@@ -358,7 +336,7 @@ app.whenReady().then(() => {
 
   RecallAiSdk.addEventListener('realtime-event', async (evt) => {
     //evt.data.data.buffer = ''
-    console.log('realtime event',evt.data.data.timestamp);
+    console.log('realtime event',evt);
     
     win.webContents.send('recall-buffer', evt);
     
@@ -527,6 +505,17 @@ app.whenReady().then(() => {
         break;
       case 'stop-recording':
         RecallAiSdk.stopRecording({ windowId: detectedMeeting.window.id });
+        break;
+      case 'change-provider':
+        currentProvider = arg.provider;
+        console.log(`Provider changed to ${currentProvider}`);
+        if (state.recording && detectedMeeting) {
+             console.log("Restarting recording to apply provider change...");
+             RecallAiSdk.stopRecording({ windowId: detectedMeeting.window.id });
+             setTimeout(async () => {
+                await startRecording(detectedMeeting.window.id);
+             }, 2000);
+        }
         break;
     }
   });
