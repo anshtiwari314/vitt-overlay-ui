@@ -38,3 +38,38 @@
     //     }
     //   ]
     // }
+
+
+    //recall.ai 
+
+    // recording_config: {
+    //   transcript: {
+    //     provider: {
+    //       recallai_streaming: {}
+    //     }
+    //   },
+    //   realtime_endpoints: [
+    //     {
+    //       type: 'desktop_sdk_callback',
+    //       events: ['transcript.data', 'transcript.partial_data']
+    //     }
+    //   ]
+    // }
+
+    //Gladia
+
+    // {
+    //   "transcript": {
+    //     "provider": {
+    //       "gladia_v2_streaming": {
+    //         "model": "solaria-1"
+    //       }
+    //     }
+    //   },
+    //   "realtime_endpoints": [
+    //     {
+    //       type: 'desktop_sdk_callback',
+    //       events: ['transcript.data', 'transcript.partial_data']
+    //     }
+    //   ]
+    // }

@@ -82,7 +82,7 @@ async function createDesktopSdkUpload() {
         {
           "type": "desktop_sdk_callback",
           "events": [
-            "transcript.partial_data",
+            //"transcript.partial_data",
             "transcript.data"
           ]
         }
@@ -100,7 +100,7 @@ async function createDesktopSdkUpload() {
       "realtime_endpoints": [
         {
           "type": "desktop_sdk_callback",
-          "events": ["transcript.data", "transcript.partial_data"]
+          "events": ["transcript.data"]
         }
       ]
     };
