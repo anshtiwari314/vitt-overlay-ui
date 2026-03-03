@@ -134,6 +134,22 @@
   margin-bottom: var(--space-2);
 }
 
+/* Provider select styling */
+.provider-selector select {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.provider-selector select option {
+  background-color: #111111;
+  color: #ffffff;
+}
+
 .meeting-id-box {
   display: flex;
   align-items: center;

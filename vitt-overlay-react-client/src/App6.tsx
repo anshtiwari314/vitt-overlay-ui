@@ -477,7 +477,7 @@ export default function App6() {
     if (!recallElectronAPI || !(window as unknown as { overlay?: unknown }).overlay) return
     const overlay = (window as unknown as { overlay: { getRecallBuffer: (cb: (d: unknown) => void) => () => void; getMeetingId: (cb: (id: string) => void) => () => void; meetingDetected: (cb: (e: { window?: { id: string; platform: string; url?: string } }) => void) => () => void } }).overlay
     const unsubBuffer = overlay.getRecallBuffer((data: any) => {
-      // console.log('recall-buffer',data)
+       console.log('recall-buffer',data)
       try {
         // data structure expected: { data: { event: "transcript.data", data: { participant: {id,name,is_host}, words: [...] } } }
         const payload = data?.data?.data;
@@ -650,18 +650,11 @@ export default function App6() {
             <select 
                 value={selectedProvider} 
                 onChange={handleProviderChange}
-                style={{
-                    width: '100%',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    background: 'rgba(255,255,255,0.1)',
-                    border: '1px solid var(--border-glass)',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px'
-                }}
             >
                 <option value="deepgram">Deepgram</option>
                 <option value="assemblyai">AssemblyAI</option>
+                {/* <option value="recallai">Recall.ai</option> */}
+                <option value="gladia">Gladia</option>
             </select>
           </div>
           {meetingId && (
