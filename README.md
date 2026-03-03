@@ -10,7 +10,7 @@ This Project is Develop for Vitt Ai which can show transcriptions of Zoom & Team
 
 ## Screenshots
 
-<img src="/project-screenshots/overlay-ui-2.PNG" width="100%" height="80%">
+<img src="/project-screenshots/overlay-ui-3.PNG" width="100%" height="80%">
 
 
 ## Installation 
