@@ -67,21 +67,23 @@ async function createDesktopSdkUpload() {
   let recording_config = {};
   if (currentProvider === 'deepgram') {
     recording_config = {
-      "transcript": {
-        "provider": {
-          "deepgram_streaming": {
-            // "model": "nova-2",
-            // "language": "en",
-            // "punctuate": true,
-            // "smart_format": true,
-            // "diarize": true
+      transcript: {
+        provider: {
+          deepgram_streaming: {
+            // model: "nova-2",
+            // language: "en",
+            // punctuate: true,
+            // smart_format: true,
+            // diarize: true
           }
         }
       },
-      "realtime_endpoints": [
+      video_mixed_mp4: null,
+    audio_mixed_mp3: {},
+      realtime_endpoints: [
         {
-          "type": "desktop_sdk_callback",
-          "events": [
+          type: "desktop_sdk_callback",
+          events: [
             //"transcript.partial_data",
             "transcript.data"
           ]
@@ -90,17 +92,55 @@ async function createDesktopSdkUpload() {
     };
   } else if (currentProvider === 'assemblyai') {
     recording_config = {
-      "transcript": {
-        "provider": {
-          "assembly_ai_v3_streaming": {
+      transcript: {
+        provider: {
+          assembly_ai_v3_streaming: {
             // any additional AssemblyAI real-time params
           }
         }
       },
-      "realtime_endpoints": [
+      video_mixed_mp4: null,
+    audio_mixed_mp3: {},
+      realtime_endpoints: [
         {
-          "type": "desktop_sdk_callback",
-          "events": ["transcript.data"]
+          type: "desktop_sdk_callback",
+          events: ["transcript.data"]
+        }
+      ]
+    };
+  } else if (currentProvider === 'recallai') {
+    // Uses Recall.ai streaming provider as in temp.js example
+    recording_config = {
+      transcript: {
+        provider: {
+          recallai_streaming: {}
+        }
+      },
+      video_mixed_mp4: null,
+    audio_mixed_mp3: {},
+      realtime_endpoints: [
+        {
+          type: "desktop_sdk_callback",
+          events: ["transcript.data"]
+        }
+      ]
+    };
+  } else if (currentProvider === 'gladia') {
+    // Uses Gladia V2 streaming provider as in temp.js example
+    recording_config = {
+      transcript: {
+        provider: {
+          gladia_v2_streaming: {
+            model: "solaria-1"
+          }
+        }
+      },
+      video_mixed_mp4: null,
+    audio_mixed_mp3: {},
+      realtime_endpoints: [
+        {
+          type: "desktop_sdk_callback",
+          events: ["transcript.data"]
         }
       ]
     };
