@@ -102,6 +102,19 @@
   gap: var(--space-1);
 }
 
+.app4-actions,
+.app4-actions *,
+.meeting-card-close,
+.meeting-card-close *,
+.copy-btn,
+.copy-btn *,
+.meeting-list-item,
+.meeting-list-item *,
+.link-btn,
+.link-btn * {
+  -webkit-app-region: no-drag;
+}
+
 .btn-icon {
   width: 32px;
   height: 32px;

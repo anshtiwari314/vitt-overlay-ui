@@ -1,7 +1,7 @@
 import React,{ useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+// import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
@@ -383,6 +383,7 @@ function App() {
   };
 
   function renderChildren(){
+    console.log("Renderer window.overlay check:", window.overlay);
     if (selectedTab === 'transcript') {
       return <TranscriptionList />
     }else if (selectedTab === 'prompts') {

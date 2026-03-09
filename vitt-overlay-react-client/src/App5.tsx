@@ -363,6 +363,18 @@ export default function App5() {
   const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
 
   useEffect(() => {
+    // Debug info to compare dev vs packaged builds
+    // eslint-disable-next-line no-console
+    console.log(
+      'App5 init - bridge debug',
+      JSON.stringify({
+        overlayExists: !!(window as unknown as { overlay?: unknown }).overlay,
+        electronAPIExists: !!recallElectronAPI
+      })
+    )
+  }, [recallElectronAPI])
+
+  useEffect(() => {
     currentUserRef.current = currentUser
     sessionuidRef.current = (currentUser as { sessionuid?: string })?.sessionuid
   }, [currentUser])
@@ -476,9 +488,48 @@ export default function App5() {
     if (!currentActiveExists) setActiveMeetingId(meetings[0].id)
   }, [meetings, activeMeetingId])
 
-  const closeApp = () => (window as unknown as { overlay?: { quitApp: () => void } }).overlay?.quitApp()
-  const minimizeApp = () => (window as unknown as { overlay?: { minimizeApp: () => void } }).overlay?.minimizeApp?.()
-  const openExternal = (url: string) => (window as unknown as { overlay?: { openExternal: (u: string) => void } }).overlay?.openExternal?.(url)
+  const closeApp = () => {
+    // eslint-disable-next-line no-console
+    console.log(
+      'closeApp clicked',
+      JSON.stringify({
+        overlayExists: !!(window as unknown as { overlay?: unknown }).overlay,
+        electronAPIExists: !!recallElectronAPI
+      })
+    )
+    const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
+    if (overlay?.quitApp) {
+      overlay.quitApp()
+      return
+    }
+    recallElectronAPI?.send('close-app', undefined)
+  }
+
+  const minimizeApp = () => {
+    // eslint-disable-next-line no-console
+    console.log(
+      'minimizeApp clicked',
+      JSON.stringify({
+        overlayExists: !!(window as unknown as { overlay?: unknown }).overlay,
+        electronAPIExists: !!recallElectronAPI
+      })
+    )
+    const overlay = (window as unknown as { overlay?: { minimizeApp?: () => void } }).overlay
+    if (overlay?.minimizeApp) {
+      overlay.minimizeApp()
+      return
+    }
+    recallElectronAPI?.send('minimize-app', undefined)
+  }
+
+  const openExternal = (url: string) => {
+    const overlay = (window as unknown as { overlay?: { openExternal?: (u: string) => void } }).overlay
+    if (overlay?.openExternal) {
+      overlay.openExternal(url)
+      return
+    }
+    recallElectronAPI?.send('open-external', url)
+  }
 
   const copyToClipboard = (text?: string) => {
     const val = text ?? meetingId
@@ -556,9 +607,9 @@ export default function App5() {
   }
 
   return (
-    <div className="drag-region">
+    <div>
       <div
-        className="card app4-card drag-region"
+        className="card app4-card"
         id="card"
         data-theme={theme}
         style={{ ['--bg-opacity' as string]: transparency / 100 }}

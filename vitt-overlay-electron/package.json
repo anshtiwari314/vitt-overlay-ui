@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "npm run build:renderer && electron .",
-    "dev": "npm run build:renderer && electron .",
-    "build:renderer": "vite build",
+    "start": "electron .",
+    "dev": "electron .",
+    "build:renderer": "cd ../vitt-overlay-react-client && npm run build",
     "dist": "npm run build:renderer && electron-builder"
   },
   "keywords": [],
@@ -54,10 +54,8 @@
     "productName": "Overlay-Vitt",
     "files": ["dist", "main.js", "preload.js", "build", ".env"],
     "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      }
+      { "from": ".env", "to": ".env" },
+      { "from": "../vitt-overlay-react-client/dist", "to": "client-dist" }
     ],
     "win": {
       "target": "portable",

@@ -240,13 +240,16 @@ function createWindow () {
   try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
 
   //win.setIgnoreMouseEvents(true, { forward: true });
-  // Load React app directly from built dist/ (no localhost – built by "npm run build:renderer" when you run "npm start")
-  const distPath = path.join(__dirname, 'dist', 'index.html');
-  win.loadFile(distPath);
-  // if (!app.isPackaged) {
-  //   win.webContents.openDevTools()
-  // }
-  win.webContents.openDevTools()
+  if (!app.isPackaged) {
+    // Dev: load Vite dev server
+    win.loadURL('http://localhost:5173');
+    
+  } else {
+    // Prod/packaged: load built React app copied as extraResources to client-dist
+    const clientDistIndex = path.join(process.resourcesPath, 'client-dist', 'index.html');
+    win.loadFile(clientDistIndex);
+  }
+  win.webContents.openDevTools();
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
 
