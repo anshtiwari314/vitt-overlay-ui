@@ -216,8 +216,9 @@ function createWindow () {
   try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
 
   //win.setIgnoreMouseEvents(true, { forward: true });
-  //win.loadFile('index.html');
-  win.loadURL('http://localhost:5173');
+  // Load React app directly from built dist/ (no localhost – built by "npm run build:renderer" when you run "npm start")
+  const distPath = path.join(__dirname, 'dist', 'index.html');
+  win.loadFile(distPath);
   win.webContents.openDevTools()
 
   // win.webContents.on('did-finish-load', () => {
