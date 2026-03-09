@@ -1,17 +1,26 @@
-//import { fileURLToPath } from 'url';
-//const WebSocket = require('ws');
-
-import {fileURLToPath} from 'url'
-import axios from 'axios';
-import dotenv from 'dotenv'
-dotenv.config();
-dotenv.config({ path: process.resourcesPath + "/app/.env" });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-//import path from 'node:path';
+import { fileURLToPath } from 'url'
 import path from 'path'
+import fs from 'fs'
+import dotenv from 'dotenv'
+import axios from 'axios'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load .env from first path that exists (dev + packaged)
+const envCandidates = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '.env'),
+  path.join(process.resourcesPath || '', '.env'),
+  path.join(process.resourcesPath || '', 'app', '.env'),
+]
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath })
+    console.log('Loaded environment from:', envPath)
+    break
+  }
+}
 
 import { app, BrowserWindow, ipcMain, shell, dialog, Notification,globalShortcut, nativeTheme, screen,Menu,Tray } from 'electron';
 import RecallAiSdk from '@recallai/desktop-sdk';
@@ -222,7 +231,7 @@ function createWindow () {
       // nodeIntegration: true,
       // contextIsolation: true,
       // sandbox: true,
-      preload: __dirname + '/preload.js',
+      preload: path.join(__dirname, 'preload.js'),
       sandbox:false,
       nodeIntegration: true,
       contextIsolation: true,
@@ -234,10 +243,13 @@ function createWindow () {
   try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
 
   //win.setIgnoreMouseEvents(true, { forward: true });
-  //win.loadFile('index.html');
-  win.loadURL('http://localhost:5173');
-  win.webContents.openDevTools()
-
+  if (!app.isPackaged) {
+    win.loadURL('http://localhost:5173');
+    win.webContents.openDevTools();
+  } else {
+    // Packaged: load React build from dist/ inside the app
+    win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+  }
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
 
@@ -298,11 +310,18 @@ function showWindow() {
 }
 
 function createTray() {
-  // Use a relative path to your icon file (e.g., in a 'resources' folder)
-  const iconPath = path.join(__dirname, 'vitt-logo.png'); 
-  
-  // NOTE: For Windows, a .ico file is often preferred for Tray.
-  tray = new Tray(iconPath);
+  let iconPath;
+  if (app.isPackaged) {
+    iconPath = path.join(process.resourcesPath, 'build', 'vitt-logo.png');
+  } else {
+    iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
+  }
+  try {
+    tray = new Tray(iconPath);
+  } catch (e) {
+    console.error('Failed to create tray icon', iconPath, e);
+    return;
+  }
 
   tray.setToolTip('My Electron App');
   
