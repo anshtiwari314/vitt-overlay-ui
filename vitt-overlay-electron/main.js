@@ -2,16 +2,27 @@
 //const WebSocket = require('ws');
 
 import {fileURLToPath} from 'url'
+import fs from 'fs'
+import path from 'path'
 import axios from 'axios';
 import dotenv from 'dotenv'
-dotenv.config();
-dotenv.config({ path: process.resourcesPath + "/app/.env" });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const envCandidates = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '.env'),
+  path.join(process.resourcesPath, '.env'),
+  path.join(process.resourcesPath, 'app', '.env'),
+];
 
-//import path from 'node:path';
-import path from 'path'
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('Loaded environment from:', envPath);
+    break;
+  }
+}
 
 import { app, BrowserWindow, ipcMain, shell, dialog, Notification,globalShortcut, nativeTheme, screen,Menu,Tray } from 'electron';
 import RecallAiSdk from '@recallai/desktop-sdk';
@@ -41,6 +52,19 @@ function sendState() {
   } catch (e) {
     console.error("Failed to send message to renderer:", e);
   }
+}
+
+function revealWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+  try {
+    win.flashFrame(true);
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.flashFrame(false);
+    }, 3000);
+  } catch (e) {}
 }
 
 function getFormattedDate() {
@@ -204,7 +228,7 @@ function createWindow () {
       // nodeIntegration: true,
       // contextIsolation: true,
       // sandbox: true,
-      preload: __dirname + '/preload.js',
+      preload: path.join(__dirname, 'preload.js'),
       sandbox:false,
       nodeIntegration: true,
       contextIsolation: true,
@@ -219,8 +243,10 @@ function createWindow () {
   // Load React app directly from built dist/ (no localhost – built by "npm run build:renderer" when you run "npm start")
   const distPath = path.join(__dirname, 'dist', 'index.html');
   win.loadFile(distPath);
+  // if (!app.isPackaged) {
+  //   win.webContents.openDevTools()
+  // }
   win.webContents.openDevTools()
-
   // win.webContents.on('did-finish-load', () => {
   //   console.log("Renderer finished loading");
 
@@ -281,11 +307,22 @@ function showWindow() {
 }
 
 function createTray() {
-  // Use a relative path to your icon file (e.g., in a 'resources' folder)
-  const iconPath = path.join(__dirname, 'vitt-logo.png'); 
-  
-  // NOTE: For Windows, a .ico file is often preferred for Tray.
-  tray = new Tray(iconPath);
+  // Resolve tray icon for both dev and packaged builds
+  let iconPath;
+  if (app.isPackaged) {
+    // In the built app, assets live under process.resourcesPath
+    iconPath = path.join(process.resourcesPath, 'build', 'vitt-logo.png');
+  } else {
+    // In dev, use the local build folder
+    iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
+  }
+
+  try {
+    tray = new Tray(iconPath);
+  } catch (e) {
+    console.error('Failed to create tray icon', iconPath, e);
+    return;
+  }
 
   tray.setToolTip('My Electron App');
   
@@ -311,6 +348,9 @@ Menu.setApplicationMenu(menu);
 
 
 
+
+// Set App User Model ID (AUMID) for notifications on Windows
+app.setAppUserModelId("com.VittAi.overlay");
 
 app.whenReady().then(() => {
   createWindow();
@@ -397,6 +437,8 @@ app.whenReady().then(() => {
       body: 'An error occured.',
     }).show();
 
+    revealWindow();
+
     if (process.platform === "darwin") app.dock.bounce('critical');
 
     console.error("ERROR: ", type, message);
@@ -460,6 +502,7 @@ app.whenReady().then(() => {
     });
 
     notif.show();
+    revealWindow();
   });
 
   RecallAiSdk.addEventListener('sdk-state-change', (event) => {
@@ -500,11 +543,21 @@ app.whenReady().then(() => {
   
 
   ipcMain.on('close-app', () => {
-    //console.log('app is now closed');
-    app.quit();
-});
+    try {
+      console.log('ipcMain: close-app received');
+      app.quit();
+    } catch (e) {
+      console.error('ipcMain: close-app error', e);
+    }
+  });
+
   ipcMain.on('minimize-app', () => {
-    if (win) win.minimize();
+    try {
+      console.log('ipcMain: minimize-app received');
+      if (win) win.minimize();
+    } catch (e) {
+      console.error('ipcMain: minimize-app error', e);
+    }
   });
   ipcMain.on('open-external', (event, url) => {
     shell.openExternal(url);

@@ -53,6 +53,12 @@
     "appId": "com.VittAi.overlay",
     "productName": "Overlay-Vitt",
     "files": ["dist", "main.js", "preload.js", "build", ".env"],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
     "win": {
       "target": "portable",
       "icon": "build/vitt-logo.png"

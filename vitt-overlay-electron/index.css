@@ -25,6 +25,17 @@ body {
 }
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
+button,
+button *,
+input,
+textarea,
+select,
+option,
+a,
+[role="button"],
+[role="button"] * {
+  -webkit-app-region: no-drag;
+}
 
 .card-header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 8px 4px; }
 .title { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .2px; }

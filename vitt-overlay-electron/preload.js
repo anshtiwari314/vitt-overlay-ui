@@ -36,7 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI',{
    ipcRenderer: {
     send: (channel, data) => {
       // Whitelist channels
-      const validChannels = ['message-from-renderer', 'api-key', 'log'];
+      const validChannels = ['message-from-renderer', 'api-key', 'log', 'close-app', 'minimize-app', 'open-external'];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, data);
       }

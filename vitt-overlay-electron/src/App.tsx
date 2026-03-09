@@ -383,6 +383,7 @@ function App() {
   };
 
   function renderChildren(){
+    console.log("Renderer window.overlay check:", window.overlay);
     if (selectedTab === 'transcript') {
       return <TranscriptionList />
     }else if (selectedTab === 'prompts') {
