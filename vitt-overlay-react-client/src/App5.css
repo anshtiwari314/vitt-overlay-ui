@@ -459,13 +459,13 @@
 }
 
 .chat-textarea-wrap {
-  display: flex;
-  gap: var(--space-2);
-  align-items: flex-end;
+  display: block;
+  width: 100%;
 }
 
 .chat-textarea {
-  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   min-height: 44px;
   max-height: 120px;
   resize: vertical;
@@ -486,31 +486,6 @@
 
 .chat-textarea:focus {
   border-color: var(--accent);
-}
-
-.chat-send-btn {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: #0b0b0b;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: transform 0.2s, opacity 0.2s;
-}
-
-.chat-send-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-  opacity: 0.95;
-}
-
-.chat-send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Settings Tab */

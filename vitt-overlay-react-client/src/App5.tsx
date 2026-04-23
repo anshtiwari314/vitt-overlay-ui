@@ -8,27 +8,16 @@ import { addOutgoingMessage, addIncomingMessages } from './redux/reducers/chatWi
 import parse from 'html-react-parser'
 import ReactHtmlParser from 'html-react-parser'
 import {
-  Mic,
-  Pause,
-  Copy,
   SunMoon,
   SunMedium,
-  Link2,
   Minus,
   LayoutDashboard,
   X,
-  CheckCircle2,
-  AlertCircle,
-  UploadCloud,
-  Send,
   Loader2
 } from 'lucide-react'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
-import GMeetIcon from './assets/g-meet.png'
-import ZoomIcon from './assets/zoom.png'
-import TeamsIcon from './assets/teams.png'
 import type { ChatMessage } from './redux/reducers/chatWithAIReducer'
 
 /** Single shared WebSocket for the app so only one connection exists. */
@@ -36,92 +25,7 @@ let app5SharedWs: WebSocket | null = null
 
 // --- Components ---
 
-function TranscriptionList() {
-  const transcriptions = useSelector((state: { transcriptionReducer: { transcriptions: { speaker?: string; transcription: string }[] } }) => state.transcriptionReducer.transcriptions)
-  return (
-    <div className="content-list">
-      {transcriptions.map((e, i) => (
-        <TranscriptionItem e={e} key={i} />
-      ))}
-    </div>
-  )
-}
-
-function TranscriptionItem({ e }: { e: { speaker?: string; transcription: string } }) {
-  return (
-    <div className="transcription-card">
-      {e.speaker && <div className="transcription-header">{e.speaker}</div>}
-      <div className="transcription-text">{e.transcription}</div>
-    </div>
-  )
-}
-
-function PromptList() {
-  const prompts = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) => state.promptsReducer.prompts)
-  return (
-    <div className="content-list">
-      {prompts?.map((e: { prompt: string }, i: number) => (
-        <PromptItem e={e} key={i} />
-      ))}
-    </div>
-  )
-}
-
-function PromptItem({ e }: { e: { prompt: string } }) {
-  return (
-    <div className="transcription-card" style={{ background: 'rgba(116, 255, 160, 0.05)', borderColor: 'rgba(116, 255, 160, 0.2)' }}>
-      <div className="transcription-text">{parse(e.prompt)}</div>
-    </div>
-  )
-}
-
-function UploadsTab({ sdkState }: { sdkState: { meetings: { id: string; title: string; status: string; uploadPercentage?: number }[] } }) {
-  const [selectedMeeting, setSelectedMeeting] = useState<{ id: string } | null>(null)
-
-  const StatusIcon = ({ status }: { status: string }) => {
-    const props = { size: 20, strokeWidth: 2 }
-    switch (status) {
-      case 'completed':
-        return <CheckCircle2 {...props} color="var(--accent)" />
-      case 'failed':
-        return <AlertCircle {...props} color="var(--danger)" />
-      case 'in-progress':
-        return <UploadCloud {...props} color="#60a5fa" />
-      case 'paused':
-        return <Pause {...props} color="var(--text-muted)" />
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div className="content-list">
-      {(sdkState.meetings || []).map((meeting) => (
-        <div
-          key={meeting.id}
-          className="transcription-card"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            cursor: 'pointer',
-            borderColor: selectedMeeting?.id === meeting.id ? 'var(--accent)' : 'var(--border-glass)'
-          }}
-          onClick={() => setSelectedMeeting(meeting)}
-        >
-          <StatusIcon status={meeting.status} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{meeting.title}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{meeting.id}</div>
-            {meeting.uploadPercentage != null && (
-              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{meeting.uploadPercentage}% Uploaded</div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
+// Tabs are intentionally hidden from the UI; AI Chat remains default.
 
 const CHAT_RESPONSE_TIMEOUT_MS = 15000
 
@@ -239,98 +143,6 @@ function ChatWithAITab({
             disabled={sending}
             rows={2}
           />
-          <button
-            type="button"
-            className="chat-send-btn"
-            onClick={sendMessage}
-            disabled={sending || !input.trim()}
-            title="Send"
-          >
-            <Send size={20} />
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SettingsTab({
-  transparency,
-  setTransparency,
-  openExternal
-}: {
-  transparency: number
-  setTransparency: (v: number) => void
-  openExternal: (url: string) => void
-}) {
-  const [language, setLanguage] = useState('english')
-
-  return (
-    <div className="content-list settings-tab">
-      <div className="setting-section">
-        <div className="setting-header">Profile</div>
-        <div className="setting-row">
-          <span className="setting-label">User ID</span>
-          <span className="setting-value">user_12345</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Email</span>
-          <span className="setting-value">user@example.com</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Mobile</span>
-          <span className="setting-value">xxxxx92</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Plan</span>
-          <span className="setting-value" style={{ color: 'var(--accent)' }}>Premium</span>
-        </div>
-      </div>
-
-      <div className="setting-section">
-        <div className="setting-header">Preferences</div>
-        <div className="setting-row">
-          <span className="setting-label">Language</span>
-          <select
-            className="setting-input"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-          >
-            <option value="english">English</option>
-            <option value="hindi">Hindi</option>
-            <option value="marathi">Marathi</option>
-          </select>
-        </div>
-        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-            <span className="setting-label">Transparency</span>
-            <span className="setting-value">{transparency}%</span>
-          </div>
-          <input
-            type="range"
-            min={50}
-            max={100}
-            value={transparency}
-            onChange={(e) => setTransparency(Number(e.target.value))}
-            className="setting-slider"
-          />
-        </div>
-      </div>
-
-      <div className="setting-section">
-        <div className="setting-header">About</div>
-        <div className="setting-row">
-          <span className="setting-label">App Version</span>
-          <span className="setting-value">1.0.2</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Last Login</span>
-          <span className="setting-value">Today, 10:30 AM</span>
-        </div>
-        <div className="setting-row" style={{ marginTop: 8 }}>
-          <span className="link-btn" onClick={() => openExternal('https://vitt-health-insurance.netlify.app/reset-password')}>
-            Change Password
-          </span>
         </div>
       </div>
     </div>
@@ -344,13 +156,11 @@ export default function App5() {
   const wsUrl = 'ws://34.100.145.102/ws'
   //const wsUrl = 'ws://192.168.1.35:8080/';
   //const wsUrl = 'wss://abdb2e4353fb.ngrok-free.app/ws'
-  const [selectedTab, setSelectedTab] = useState('transcript')
+  const [selectedTab, setSelectedTab] = useState('chat')
   const [theme, setTheme] = useState('transparent')
-  const [transparency, setTransparency] = useState(85)
   const [copyToast, setCopyToast] = useState(false)
-  const [meetingId, setMeetingId] = useState('')
-  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string }[]>([])
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
+  const [currentTime, setCurrentTime] = useState('')
+  const [isServerConnected, setIsServerConnected] = useState(false)
   const [sdkState, setSdkState] = useState({
     recording: false,
     permissions_granted: true,
@@ -378,6 +188,16 @@ export default function App5() {
     currentUserRef.current = currentUser
     sessionuidRef.current = (currentUser as { sessionuid?: string })?.sessionuid
   }, [currentUser])
+
+  useEffect(() => {
+    const formatNow = () =>
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setCurrentTime(formatNow())
+    const timer = setInterval(() => {
+      setCurrentTime(formatNow())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!recallElectronAPI) return
@@ -408,7 +228,10 @@ export default function App5() {
       tempWs = new WebSocket(wsUrl)
       app5SharedWs = tempWs
       ref.current = tempWs
-      tempWs.onopen = () => tempWs.send('Hello from browser!')
+      tempWs.onopen = () => {
+        setIsServerConnected(true)
+        tempWs.send('Hello from browser!')
+      }
       tempWs.onmessage = (event: MessageEvent) => {
         try {
           const result = JSON.parse(event.data as string) as Record<string, unknown>
@@ -433,9 +256,13 @@ export default function App5() {
         }
       }
       tempWs.onclose = () => {
+        setIsServerConnected(false)
         app5SharedWs = null
         ref.current = null
         setTimeout(connect, reconnectInterval)
+      }
+      tempWs.onerror = () => {
+        setIsServerConnected(false)
       }
     }
     connect()
@@ -443,50 +270,6 @@ export default function App5() {
       ref.current = null
     }
   }, [])
-
-  useEffect(() => {
-    if (!recallElectronAPI || !(window as unknown as { overlay?: unknown }).overlay) return
-    const overlay = (window as unknown as { overlay: { getRecallBuffer: (cb: (d: unknown) => void) => () => void; getMeetingId: (cb: (id: string) => void) => () => void; meetingDetected: (cb: (e: { window?: { id: string; platform: string; url?: string } }) => void) => () => void } }).overlay
-    const unsubBuffer = overlay.getRecallBuffer((data: unknown) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'recall-buffer',
-            userid: currentUserRef.current?.id ?? (currentUserRef.current as { userid?: string })?.userid,
-            sessionid: sessionuidRef.current,
-            data,
-            timestamp: getTimeStamp()
-          })
-        )
-      }
-    })
-    const unsubMeetingId = overlay.getMeetingId((id: string) => {
-      setMeetingId(id)
-      const el = document.getElementById('meeting_id')
-      if (el) el.innerText = id
-    })
-    const unsubMeetingDetected = overlay.meetingDetected((e: { window?: { id: string; platform: string; url?: string } }) => {
-      const newMeeting = e.window
-      if (!newMeeting) return
-      setMeetings((prev) => {
-        if (prev.find((m) => m.id === newMeeting.id)) return prev
-        const updated = [...prev, newMeeting]
-        if (updated.length === 1) setActiveMeetingId(newMeeting.id)
-        return updated
-      })
-    })
-    return () => {
-      if (typeof unsubBuffer === 'function') unsubBuffer()
-      if (typeof unsubMeetingId === 'function') unsubMeetingId()
-      if (typeof unsubMeetingDetected === 'function') unsubMeetingDetected()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (meetings.length === 0) return
-    const currentActiveExists = activeMeetingId != null && meetings.some((m) => m.id === activeMeetingId)
-    if (!currentActiveExists) setActiveMeetingId(meetings[0].id)
-  }, [meetings, activeMeetingId])
 
   const closeApp = () => {
     // eslint-disable-next-line no-console
@@ -531,10 +314,9 @@ export default function App5() {
     recallElectronAPI?.send('open-external', url)
   }
 
-  const copyToClipboard = (text?: string) => {
-    const val = text ?? meetingId
-    if (!val) return
-    navigator.clipboard.writeText(val).then(() => {
+  const copyToClipboard = (text: string) => {
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
       setCopyToast(true)
       setTimeout(() => setCopyToast(false), 2000)
     })
@@ -553,66 +335,13 @@ export default function App5() {
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const sessionid = (currentUser as { sessionuid?: string })?.sessionuid ?? (sessionuidRef.current ?? '')
 
-  const getIconForPlatform = (platform: string) => {
-    if (platform === 'zoom') return ZoomIcon
-    if (platform === 'google-meet') return GMeetIcon
-    if (platform === 'teams') return TeamsIcon
-    return null
-  }
-
-  const renderMeetingStatus = () => {
-    if (activeMeetingId) {
-      const meeting = meetings.find((m) => m.id === activeMeetingId)
-      if (!meeting) return null
-      const icon = getIconForPlatform(meeting.platform)
-      const name = meeting.platform === 'google-meet' ? 'Google Meet' : meeting.platform?.charAt(0).toUpperCase() + meeting.platform?.slice(1)
-      return (
-        <div className="meeting-card">
-          <div className="meeting-card-close" onClick={() => setActiveMeetingId(null)}>
-            <X size={12} />
-          </div>
-          <div className="meeting-info">
-            <div className="meeting-icon">
-              <img src={icon ?? ''} alt={name} />
-            </div>
-            <div className="meeting-details">
-              <span className="meeting-label">Meeting Detected</span>
-              <span className="meeting-platform">{name}</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.id)} title="Copy ID">
-              <Copy size={16} />
-            </button>
-            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.url)} title="Copy Link">
-              <Link2 size={16} />
-            </button>
-          </div>
-        </div>
-      )
-    }
-    if (meetings.length > 0) {
-      return (
-        <div className="meeting-list">
-          <span className="meeting-list-label">Meetings:</span>
-          {meetings.map((m) => (
-            <div key={m.id} className="meeting-list-item" onClick={() => setActiveMeetingId(m.id)} title={`Open ${m.platform}`}>
-              <img src={getIconForPlatform(m.platform) ?? ''} alt={m.platform} />
-            </div>
-          ))}
-        </div>
-      )
-    }
-    return null
-  }
-
   return (
     <div>
       <div
         className="card app4-card"
         id="card"
         data-theme={theme}
-        style={{ ['--bg-opacity' as string]: transparency / 100 }}
+        style={{ ['--bg-opacity' as string]: 0.85 }}
       >
         <div className="app4-header drag-region">
           <div className="app4-title">
@@ -634,100 +363,39 @@ export default function App5() {
             </button>
           </div>
         </div>
-
-        <div className="status-section no-drag">
-          {meetingId && (
-            <div className="meeting-id-box">
-              <span id="meeting_id" className="meeting-id-text">
-                {meetingId}
-              </span>
-              <div className="copy-btn" onClick={() => copyToClipboard(meetingId)}>
-                <Copy size={14} />
-              </div>
-            </div>
-          )}
-          {renderMeetingStatus()}
+        <div className="no-drag" style={{ padding: '0 12px 2px', fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
+          {currentTime}
+        </div>
+        <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, color: isServerConnected ? '#22c55e' : '#ef4444' }}>
+          {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
         </div>
 
-        {selectedTab !== 'settings' && (
-          <div className="controls-section no-drag">
-            {sdkState.permissions_granted ? (
-              <>
-                <button
-                  type="button"
-                  className={`btn-primary ${sdkState.recording ? 'recording' : ''}`}
-                  disabled={sdkState.recording}
-                  onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'start-recording' })}
-                >
-                  <Mic size={18} />
-                  {sdkState.recording ? 'Recording...' : 'Start Recording'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  disabled={!sdkState.recording}
-                  onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'stop-recording' })}
-                >
-                  <Pause size={18} />
-                  Pause
-                </button>
-              </>
-            ) : (
-              <div style={{ width: '100%', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
-                Permissions required. Check Settings.
-              </div>
-            )}
-          </div>
-        )}
+        <div className="status-section no-drag"></div>
+
+        {/* Recording controls intentionally hidden (Recall flow removed). */}
+        {/* {selectedTab !== 'settings' && <div className="controls-section no-drag">...</div>} */}
 
         <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {selectedTab === 'transcript' && <TranscriptionList />}
-          {selectedTab === 'prompts' && <PromptList />}
-          {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
+          {/* {selectedTab === 'transcript' && <TranscriptionList />} */}
+          {/* {selectedTab === 'prompts' && <PromptList />} */}
+          {/* {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />} */}
           {selectedTab === 'chat' && (
             <ChatWithAITab setCopyToast={setCopyToast} userid={userid} sessionid={sessionid} />
           )}
-          {selectedTab === 'settings' && (
+          {/* {selectedTab === 'settings' && (
             <SettingsTab transparency={transparency} setTransparency={setTransparency} openExternal={openExternal} />
-          )}
+          )} */}
         </div>
 
-        <div className="tab-bar no-drag">
-          <TabButton active={selectedTab === 'transcript'} onClick={() => setSelectedTab('transcript')} icon="📝" label="Transcript" />
-          <TabButton active={selectedTab === 'uploads'} onClick={() => setSelectedTab('uploads')} icon="☁️" label="Uploads" />
-          <TabButton active={selectedTab === 'chat'} onClick={() => setSelectedTab('chat')} icon="🤖" label="AI Chat" />
-          <TabButton active={selectedTab === 'prompts'} onClick={() => setSelectedTab('prompts')} icon="📊" label="Prompts" />
-          <TabButton active={selectedTab === 'settings'} onClick={() => setSelectedTab('settings')} icon="⚙️" label="Settings" />
-        </div>
+        {/* Tabs intentionally hidden from UI (including AI tab icon). */}
 
         <div className="toast-container">
           <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
         </div>
-        {selectedTab !== 'settings' && (
-          <div className="bottom-hint no-drag">
-            Click-through: <b id="state">ON</b> • ⌥ + `
-          </div>
-        )}
+        <div className="bottom-hint no-drag">
+          Click-through: <b id="state">ON</b> • ⌥ + `
+        </div>
       </div>
     </div>
-  )
-}
-
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label
-}: {
-  active: boolean
-  onClick: () => void
-  icon: string
-  label: string
-}) {
-  return (
-    <button type="button" className={`tab-btn ${active ? 'active' : ''}`} onClick={onClick}>
-      <span className="tab-icon">{icon}</span>
-      <span className="tab-label">{label}</span>
-    </button>
   )
 }

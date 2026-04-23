@@ -5,28 +5,6 @@ console.log("Preload loaded");
 contextBridge.exposeInMainWorld('overlay', {
   onClickThrough: (cb) => ipcRenderer.on('overlay:clickThrough', (_e, val) => cb(val)),
   somethingHappened:(cb)=> ipcRenderer.on('something-happened',(_e,data)=>cb(data)),
-  getRecallBuffer:(cb)=> {
-    const subscription = (_event, data) => cb(data);
-    //console.log("Subscribed to recall-buffer",data);
-    //(_e,data)=>cb(data)
-    ipcRenderer.on('recall-buffer',subscription)
-    
-    return () => ipcRenderer.removeListener('recall-buffer', subscription);
-  },
-  getMeetingId:(cb)=> {
-    const subscription = (_event, data) => cb(data);
-    //console.log("Subscribed to recall-buffer",data);
-    //(_e,data)=>cb(data)
-    ipcRenderer.on('current-window-id',subscription)
-    
-    return () => ipcRenderer.removeListener('current-window-id', subscription);
-  },
-  meetingDetected:(cb)=> {
-    const subscription = (_event, data) => cb(data);
-
-    ipcRenderer.on('meeting-detected',subscription)
-    return () => ipcRenderer.removeListener('meeting-detected', subscription);
-  },
   quitApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
   openExternal: (url) => ipcRenderer.send('open-external', url)
