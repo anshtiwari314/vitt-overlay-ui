@@ -1,722 +1,461 @@
-import React,{ useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
-import {CustomFillButton,CustomFillButtonWithIcon} from './components/Buttons'
-import { Power,X } from "lucide-react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import parse from 'html-react-parser';
+import { addPrompt } from './redux/reducers/promptsReducer'
+import { addOutgoingMessage, addIncomingMessages } from './redux/reducers/chatWithAIReducer'
+import parse from 'html-react-parser'
+import ReactHtmlParser from 'html-react-parser'
 import {
-  CheckCircle2,
-  AlertCircle,
-  UploadCloud,
-  Pause,
-  Mic,
-  Key,
-  RefreshCw,
-  Copy,
   SunMoon,
   SunMedium,
-  Link2
-} from 'lucide-react';
+  Settings,
+  Minus,
+  LayoutDashboard,
+  X,
+  Loader2
+} from 'lucide-react'
 import { useData } from './context/DataWrapper'
-import {
-  faSearch,
-  //faMicrophone,
-  faMicrophoneSlash,
-  faPlusCircle,
-  faTimesCircle,
-  faRecordVinyl,
-  faMicrophoneAlt,
-  faMicrophoneAltSlash,
-  faWonSign,
-  faShare,
-  faTimes,
-  faBars,
-  faMicrophone
-} from "@fortawesome/free-solid-svg-icons";
-// import {} from "@fortawesome/free-regular-svg-icons";
-import LoadingIcons, { 
-  Audio, BallTriangle, Bars, Circles, Grid, Hearts, Oval, 
-  Puff, Rings, SpinningCircles, TailSpin, ThreeDots 
-} from 'react-loading-icons';
-
-//import FileLoadChecker from '../components/FileLoader'
-import { useVad } from "./context/VadWrapper";
 import { useAuth } from './context/AuthContext'
-import { EntypoMic,EntypoModernMic} from "react-entypo";
 import { getTimeStamp } from './functions/generalFn'
-import axios from 'axios'
-import { addPrompt } from './redux/reducers/promptsReducer'
-import GMeetIcon from './assets/g-meet.png'
-import ZoomIcon from './assets/zoom.png'
-import TeamsIcon from './assets/teams.png'
+import type { ChatMessage } from './redux/reducers/chatWithAIReducer'
 
-function TranscriptionList(){
-  const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
-  return (
-    <div>
-    {transcriptions.map((e,i)=><Transcription e={e} key={i}/>)}
-          {/* <div className="item">
-            <div className="left i-indigo">💡</div>
-            <div className="text">Suggest showing demo slide.</div>
-          </div>
-          <div className="item">
-            <div className="left i-yellow">⏰</div>
-            <div className="text">Remind to discuss pricing options.</div>
-          </div>
-          <div className="item">
-            <div className="left i-red">⚠️</div>
-            <div className="text">Ask about decision timeline.</div>
-          </div>
-          <div className="item">
-            <div className="left i-teal">🔗</div>
-            <div className="text">Link fast onboarding → faster RSOI.</div>
-          </div>
-          <div className="item">
-            <div className="left i-gray">📄</div>
-            <div className="text">Security Whitepaper.pdf</div>
-          </div> */}
-    </div>
-  )
-}
-function Transcription({e}){
+/** Single shared WebSocket for the app so only one connection exists. */
+let appSharedWs: WebSocket | null = null
 
-  //console.log('e',e)
+const CHAT_RESPONSE_TIMEOUT_MS = 15000
+
+function SettingsTab({
+  transparency,
+  setTransparency,
+  currentUser,
+  openExternal
+}: {
+  transparency: number
+  setTransparency: (v: number) => void
+  currentUser: { userid?: string; id?: string } | null
+  openExternal: (url: string) => void
+}) {
+  const [language, setLanguage] = useState('english')
+  const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
+
   return (
-    <div style={{display:'flex',justifyContent: 'flex-start',margin:'0.5rem 0'}}>
-        <div className="item" style={{marginRight:'0.5rem',
-         // backgroundColor:e.speaker==='agent'? 'orange':'blue'
-          }}>
-            <div className="left i-green">★</div>
-            <div className="text">{e.transcription}</div>
-            <div>{e.speaker}</div>
+    <div className="content-list settings-tab">
+      <div className="setting-section">
+        <div className="setting-header">Profile</div>
+        <div className="setting-row">
+          <span className="setting-label">User ID</span>
+          <span className="setting-value">{displayUserId}</span>
         </div>
-    </div>
-    
-  )
-}
-
-function PromptList(){
-  const prompts = useSelector(state=>state.promptsReducer.prompts)
-
-  console.log('prompts',prompts)
-  return (
-    <div>
-    {prompts?.map((e)=><SinglePrompt e={e}/>)}
-          
-    </div>
-  )
-}
-
-function SinglePrompt({e}){
-  return (
-    <div style={{display:'flex',justifyContent:'flex-start',margin:'0.5rem 0'}}>
-        <div className="w-full" style={{marginRight:'0.5rem',
-         // backgroundColor:e.speaker==='agent'? 'orange':'blue'
-         //width:'510px'
-         backgroundColor:'rgba(255,255,255,0.1)',padding:'0.8rem 1rem',borderRadius:'0.5rem'
-          }}>
-            {/* <div className="left i-green">★</div> */}
-            <p className="text w-full" style={{width:'', textWrap:'wrap'}}>{parse(e.prompt)}</p>
-            {/* <div>{e.speaker}</div> */}
+        <div className="setting-row">
+          <span className="setting-label">Email</span>
+          <span className="setting-value">user@example.com</span>
         </div>
+        <div className="setting-row">
+          <span className="setting-label">Mobile</span>
+          <span className="setting-value">xxxxx92</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">Plan</span>
+          <span className="setting-value" style={{ color: 'var(--accent)' }}>Premium</span>
+        </div>
+      </div>
+
+      <div className="setting-section">
+        <div className="setting-header">Preferences</div>
+        <div className="setting-row">
+          <span className="setting-label">Language</span>
+          <select
+            className="setting-input"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            <option value="english">English</option>
+            <option value="hindi">Hindi</option>
+            <option value="marathi">Marathi</option>
+          </select>
+        </div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+            <span className="setting-label">Transparency</span>
+            <span className="setting-value">{transparency}%</span>
+          </div>
+          <input
+            type="range"
+            min={50}
+            max={100}
+            value={transparency}
+            onChange={(e) => setTransparency(Number(e.target.value))}
+            className="setting-slider"
+          />
+        </div>
+      </div>
+
+      <div className="setting-section">
+        <div className="setting-header">About</div>
+        <div className="setting-row">
+          <span className="setting-label">App Version</span>
+          <span className="setting-value">1.0.2</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">Last Login</span>
+          <span className="setting-value">Today, 10:30 AM</span>
+        </div>
+        <div className="setting-row" style={{ marginTop: 8 }}>
+          <span className="link-btn" onClick={() => openExternal('https://vitt-health-insurance.netlify.app/reset-password')}>
+            Change Password
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
 
-function UploadsTab({sdkState}){
-  console.log('uploads sdkState',sdkState)
-  const [selectedMeeting, setSelectedMeeting] = React.useState(null);
-
-   const RecordingStatusIcon = ({ status }) => {
-  const iconProps = {
-    strokeWidth: 2,
-    size: 24
-  };
-
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 {...iconProps} className="status-icon completed" />;
-    case 'failed':
-      return <AlertCircle {...iconProps} className="status-icon failed" />;
-    case 'in-progress':
-      return <UploadCloud {...iconProps} className="status-icon in-progress" />;
-    case 'paused':
-      return <Pause {...iconProps} className="status-icon paused" />;
-    default:
-      return null;
-  }
-};
-
-  return (
-    <div className="recordings-list">
-          {sdkState.meetings.map((meeting) => (
-            <div
-              key={meeting.id}
-              className={`recording-item ${selectedMeeting?.id === meeting.id ? 'selected' : ''}`}
-              onClick={() => setSelectedMeeting(meeting)}
-              style={{display:'flex',alignItems:'center',gap:'1rem',marginBottom:'1rem'}}
-            >
-              <RecordingStatusIcon status={meeting.status} />
-              <div className="recording-details">
-                <p className="recording-title">{meeting.title}</p>
-                <p className="recording-title">{meeting.id}</p>
-                <p className="recording-upload-progress">
-                  {meeting.uploadPercentage}% Uploaded
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-  )
-}
-function App() {
-   // console.log('App rendered hui');
-  const recallElectronAPI = window.electronAPI?.ipcRenderer;
-  //const wsUrl = 'ws://34.100.145.102/ws'
-  const wsUrl = 'wss://b6ff8fd3aac1.ngrok-free.app/ws'
-
-  const [count, setCount] = useState(0)
-  const [selectedTab,setSelectedTab] = useState('transcript') //transcript, prompts, settings
-  const [theme,setTheme] = useState('transparent') //dark, transparent;
-  const [meetingDetected,setMeetingDetected] = useState({});
-  const {authServerUrl} = useData();
-  
-  const [sdkState, setSdkState] = React.useState({
-    bot_id: null,
-    recording: false,
-    transcript: null,
-    video_url: null,
-    permissions_granted: true,
-    meetings: [],
-  });
-  
-
-
- const logoutBtn = async () => {
-  try {
-    console.log("logout btn clicked");
-
-    const res = await axios.post(
-      `${authServerUrl}/logout`,
-      {},
-      { withCredentials: true }
-    );
-
-    console.log("logout res", res);
-
-    // recallElectronAPI.send("message-from-renderer", {
-    //   command: "logout",
-    // });
-
-    // better than reload
-    window.location.href = "/login";
-  } catch (err) {
-    console.error("Logout failed", err);
-    //alert("Logout nahi hua bhai, thoda ruk ke try kar");
-  }
-};
-
-  
-  const transcriptions = useSelector(state=>state.transcriptionReducer.transcriptions)
+function ChatWithAITab({
+  userid,
+  sessionid
+}: {
+  setCopyToast?: (v: boolean) => void
+  userid: string
+  sessionid: string
+}) {
   const dispatch = useDispatch()
+  const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
+  const messages = useSelector((state: { chatWithAIReducer: { messages: ChatMessage[] } }) => state.chatWithAIReducer.messages)
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const {manualVadStatus,setManualVadStatus,vadRecordingOn,
-    setVadRecordingOn,vadStatus,setVadStatus,vadInstance,VAD2,userSpeaking} = useVad()
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-    const {currentUser,sessionuid} = useAuth()
-
-  const {ws,setWs,wsRef} = useData()
-  const wasClosedByUserRef = useRef(false);
-
-  React.useEffect(() => {
-    if(!recallElectronAPI)
-      return ;
-    console.log("Setting up IPC listeners...");
-
-    recallElectronAPI.on("state", (newState) => {
-      //console.log("=== State received from SDK:", newState);
-      setSdkState(newState);
-    });
-
-    // Signal that renderer is ready to receive state updates
-    recallElectronAPI.send("message-from-renderer", {
-      command: "renderer-ready",
-    });
-
-    return () => {
-      recallElectronAPI.removeAllListeners("state");
-    };
-  }, []);
-
-  React.useEffect(()=>{
-    if(wsRef.current)
-      return null 
-    console.log('setting up ws connection to',wsUrl)
-
-    let tempWs ;
-    let reconnectInterval = 1000; // 5 seconds
-
-    function connect(){
-       tempWs = new WebSocket(wsUrl);
-
-    tempWs.onopen = (event) => {
-      console.log('WebSocket connection opened:', event);
-
-
-      tempWs.send('Hello from the browser!');
-
-      //setTimeout(())
-     // wsRef.current = tempWs;
-     // setWs(tempWs) // Send a message to the server
-    };
-
-    // Event listener for incoming messages
-    tempWs.onmessage = (event) => {
-      //console.log('tempws',event)
-      let result = JSON.parse(event.data);
-      //console.log('tempws',result)
-      
-      console.log('Message from server:', result);
-    //  dispatch(addTranscription(result))
-      
-      if(result.type==='transcript'){
-        dispatch(addTranscription(result))
+  useEffect(() => {
+    const onResponse = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
       }
-      if(result.type==='llm_response'){
-        dispatch(addPrompt(result))
-      }
-    };
-
-    // Event listener for errors
-    tempWs.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    // Event listener for when the connection is closed
-    tempWs.onclose = (event) => {
-      console.log('WebSocket connection closed:', event);
-      wsRef.current && wsRef.current.close();
-      
-      setTimeout(connect, reconnectInterval);
-    };
-
-    wsRef.current = tempWs;
+      setSending(false)
     }
-    
-    connect();
+    window.addEventListener('chat-response-received', onResponse)
+    return () => window.removeEventListener('chat-response-received', onResponse)
+  }, [])
 
-   
-    return ()=>{ 
-      wsRef.current && wsRef.current.close();
-      //tempWs && tempWs.close();
-      //setWs(null);
+  const sendMessage = () => {
+    const query = input.trim()
+    if (!query || sending) return
+    const timestamp = getTimeStamp()
+    dispatch(addOutgoingMessage({ content: query, timestamp }))
+    setInput('')
+    setSending(true)
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
     }
-  },[])
-
-
-  React.useEffect(()=>{
-    console.log('transcriptions',transcriptions)
-  },[transcriptions])
-
-  React.useEffect(()=>{
-    if(!ws) return ;
-
-      let timeOutId = setTimeout(()=>{
-        //sendPostReqToServer()
-        console.log('ws msg send')
-        ws.send('hello world from ws client')
-      },5000)
-
-      
-      return ()=>clearTimeout(timeOutId)
-
-  },[ws])
-
-  useEffect(()=>{
-    if(!recallElectronAPI )
-      return ;
-
-    //&& wsRef.current.readyState === WebSocket.OPEN
-    if (wsRef.current ) {
-   // console.log('overlay object in electron',window.overlay)
-    window.overlay.somethingHappened((data)=>{
-     
-      console.log('data',data)
-    })
-
-    window.overlay.getRecallBuffer((data)=>{
-     
-      console.log('recall-buffer',data)
-      let ob = {
-        type:'recall-buffer',
-        userid:currentUser?.id,
-        sessionid:sessionuid,
-        data:data,
-        timestamp:getTimeStamp()
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null
+      setSending(false)
+    }, CHAT_RESPONSE_TIMEOUT_MS)
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(
+        JSON.stringify({
+          type: 'chat-with-ai',
+          userid,
+          sessionid,
+          query,
+          timestamp
+        })
+      )
+    } else {
+      dispatch(
+        addIncomingMessages({
+          content: ['Not connected. Please check your connection.'],
+          res_timestamp: getTimeStamp()
+        })
+      )
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
       }
-      // ws.send(ob)
-      wsRef.current.send(JSON.stringify(ob))
-    })
-
-    window.overlay.getMeetingId((id)=>{
-      document.getElementById('meeting_id').innerText = `${id}`
-      
-    })
-
-    window.overlay.meetingDetected((e)=>{
-      console.log('meeting detected in overlay',e)
-      setMeetingDetected(e.window)
-    })
+      setSending(false)
+    }
   }
-  },[ws])
 
-  //console.log('VAD2', VAD2)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
+
+  return (
+    <div className="chat-tab">
+      <div className="chat-messages">
+        {messages.map((msg) =>
+          msg.role === 'user' ? (
+            <div key={msg.id} className="chat-message-out">
+              {msg.content}
+            </div>
+          ) : (
+            <div key={msg.id} className="chat-message-in">
+              <div className="chat-html-content">{ReactHtmlParser(msg.content)}</div>
+            </div>
+          )
+        )}
+        {sending && (
+          <div className="chat-loading">
+            <Loader2 size={20} className="chat-loading-spinner" />
+            <span>Waiting for response...</span>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="chat-input-wrap">
+        <div className="chat-textarea-wrap">
+          <textarea
+            className="chat-textarea"
+            placeholder="Type a message... (Shift+Enter for new line)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={sending}
+            rows={2}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
+  const wsUrl = 'ws://34.100.145.102/ws'
+  const [selectedTab, setSelectedTab] = useState('chat')
+  const [theme, setTheme] = useState('transparent')
+  const [transparency, setTransparency] = useState(85)
+  const [copyToast, setCopyToast] = useState(false)
+  const [currentTime, setCurrentTime] = useState('')
+  const [isServerConnected, setIsServerConnected] = useState(false)
+  const [sdkState, setSdkState] = useState({
+    recording: false,
+    permissions_granted: true,
+    meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
+  })
+
+  const { currentUser } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string } | null }
+  const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
+  const currentUserRef = useRef(currentUser)
+  const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
+
+  useEffect(() => {
+    console.log(
+      'App init - bridge debug',
+      JSON.stringify({
+        overlayExists: !!(window as unknown as { overlay?: unknown }).overlay,
+        electronAPIExists: !!recallElectronAPI
+      })
+    )
+  }, [recallElectronAPI])
+
+  useEffect(() => {
+    currentUserRef.current = currentUser
+    sessionuidRef.current = (currentUser as { sessionuid?: string })?.sessionuid
+  }, [currentUser])
+
+  useEffect(() => {
+    const formatNow = () =>
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setCurrentTime(formatNow())
+    const timer = setInterval(() => {
+      setCurrentTime(formatNow())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!recallElectronAPI) return
+    recallElectronAPI.on('state', (newState: unknown) => setSdkState(newState as typeof sdkState))
+    recallElectronAPI.send('message-from-renderer', { command: 'renderer-ready' })
+    return () => recallElectronAPI.removeAllListeners('state')
+  }, [])
+
+  const dispatch = useDispatch()
+  const dispatchRef = useRef(dispatch)
+  dispatchRef.current = dispatch
+  useEffect(() => {
+    const ref = wsRef as React.MutableRefObject<WebSocket | null>
+    if (appSharedWs && (appSharedWs.readyState === WebSocket.OPEN || appSharedWs.readyState === WebSocket.CONNECTING)) {
+      ref.current = appSharedWs
+      return () => {
+        ref.current = null
+      }
+    }
+    if (ref.current != null) return () => { ref.current = null }
+    let tempWs: WebSocket
+    const reconnectInterval = 1000
+    function connect() {
+      if (appSharedWs && (appSharedWs.readyState === WebSocket.OPEN || appSharedWs.readyState === WebSocket.CONNECTING)) {
+        ref.current = appSharedWs
+        return
+      }
+      tempWs = new WebSocket(wsUrl)
+      appSharedWs = tempWs
+      ref.current = tempWs
+      tempWs.onopen = () => {
+        setIsServerConnected(true)
+        tempWs.send('Hello from browser!')
+      }
+      tempWs.onmessage = (event: MessageEvent) => {
+        try {
+          const result = JSON.parse(event.data as string) as Record<string, unknown>
+          const d = dispatchRef.current
+          if (result.type === 'transcript') {
+            const text = (result.text ?? result.transcription) as string | undefined
+            const speaker = result.speaker as string | undefined
+            d(addTranscription({ ...result, text: text ?? '', speaker }))
+          }
+          if (result.type === 'llm_response') {
+            const text = ((result.text ?? result.prompt ?? result.response) as string) ?? ''
+            d(addPrompt({ text }))
+          }
+          if (result.type === 'chat-with-ai-response') {
+            const content = (Array.isArray(result.content) ? result.content : []) as string[]
+            const res_timestamp = result?.res_timestamp as string | undefined
+            d(addIncomingMessages({ content, res_timestamp }))
+            window.dispatchEvent(new CustomEvent('chat-response-received'))
+          }
+        } catch {
+          /* ignore non-json */
+        }
+      }
+      tempWs.onclose = () => {
+        setIsServerConnected(false)
+        appSharedWs = null
+        ref.current = null
+        setTimeout(connect, reconnectInterval)
+      }
+      tempWs.onerror = () => {
+        setIsServerConnected(false)
+      }
+    }
+    connect()
+    return () => {
+      ref.current = null
+    }
+  }, [])
 
   const closeApp = () => {
-    // Call the function exposed in preload.js
-    console.log('closeApp called')
-    window.overlay.quitApp();
-  };
-
-  function renderChildren(){
-    console.log("Renderer window.overlay check:", window.overlay);
-    if (selectedTab === 'transcript') {
-      return <TranscriptionList />
-    }else if (selectedTab === 'prompts') {
-      return <PromptList/>
-    }else if (selectedTab === 'uploads') {
-      return <UploadsTab  sdkState={sdkState}/>
+    const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
+    if (overlay?.quitApp) {
+      overlay.quitApp()
+      return
     }
-    return  <TranscriptionList/>
+    recallElectronAPI?.send('close-app', undefined)
   }
 
-  // return (
-  //   <div>hello world</div>
-  // )
-
-  function copyToClipboard(){
-    const text = document.getElementById('meeting_id')?.innerText;
-    navigator.clipboard.writeText(text)
-    .then(() => {
-      // Success message (optional)
-      console.log('Text copied to clipboard');
-      alert('Copied the text: ' + text);
-    })
-    .catch(err => {
-      // Error handling
-      console.error('Could not copy text: ', err);
-    })
-  }
-
-  function toggleTheme(){
-    document.body.style.backgroundColor = theme==='dark' ? 'transparent' : 'black';
-    setTheme(p=>p==='dark'?'transparent':'dark');
-
-  }
-const buttonStyle = {
-  backgroundColor: '#333',
-  border: 'none',
-  borderRadius: '6px',
-  color: '#eee',
-  padding: '6px 12px',
-  cursor: 'pointer',
-  fontSize: '11px',
-  fontWeight: 'bold',
-  display: 'flex',
-  alignItems: 'center',
-  transition: 'background 0.2s'
-};
-
-const meetingDetectedContainerStyle = {
-  display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '8px 16px',
-      backgroundColor: '#1e1e1e', // Dark theme card
-      borderRadius: '12px',
-      border: '1px solid #333',
-      width: '100%',
-      maxWidth: '450px',
-      color: '#fff',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      margin:'0 auto'
-}
-  function renderMeetingDetected(meeting){
-    switch(meeting?.platform){
-      case 'zoom':
-        return (
-          <div style={meetingDetectedContainerStyle}>
-      {/* Left Section: Context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          backgroundColor: '#2a2a2a',
-          padding: '8px',
-          borderRadius: '8px',
-          display: 'flex'
-        }}>
-          <img src={ZoomIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
-        </div>
-        <div>
-          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Zoom</p>
-        </div>
-      </div>
-
-      {/* Right Section: Actions */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button 
-          onClick={() => copyToClipboard(meeting?.id)}
-          style={buttonStyle}
-          title="Copy Meeting ID"
-        >
-          ID
-        </button>
-        <button 
-          onClick={() => copyToClipboard(meeting?.url)}
-          style={{ ...buttonStyle, color: '#d51a1a' }}
-          title="Copy Meeting Link"
-        >
-          <Link2 size={18} />
-        </button>
-      </div>
-    </div>
-        )
-      case 'google-meet':
-        return (
-          <div style={meetingDetectedContainerStyle}>
-      {/* Left Section: Context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          backgroundColor: '#2a2a2a',
-          padding: '8px',
-          borderRadius: '8px',
-          display: 'flex'
-        }}>
-          <img src={GMeetIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
-        </div>
-        <div>
-          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Google Meet</p>
-        </div>
-      </div>
-
-      {/* Right Section: Actions */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button 
-          onClick={() => copyToClipboard(meeting?.id)}
-          style={buttonStyle}
-          title="Copy Meeting ID"
-        >
-          ID
-        </button>
-        <button 
-          onClick={() => copyToClipboard(meeting?.url)}
-          style={{ ...buttonStyle, color: '#d51a1a' }}
-          title="Copy Meeting Link"
-        >
-          <Link2 size={18} />
-        </button>
-      </div>
-    </div>
-            )
-      case 'teams':
-        return (
-          <div style={meetingDetectedContainerStyle}>
-      {/* Left Section: Context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          backgroundColor: '#2a2a2a',
-          padding: '8px',
-          borderRadius: '8px',
-          display: 'flex'
-        }}>
-          <img src={TeamsIcon} alt="GMeet" style={{ width: '40px', height: '24px' }}/>
-        </div>
-        <div>
-          <p style={{ margin: 0, fontSize: '12px', color: '#aaa', fontWeight: '500' }}>Meeting Detected</p>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Teams</p>
-        </div>
-      </div>
-
-      {/* Right Section: Actions */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button 
-          onClick={() => copyToClipboard(meeting?.id)}
-          style={buttonStyle}
-          title="Copy Meeting ID"
-        >
-          ID
-        </button>
-        <button 
-          onClick={() => copyToClipboard(meeting?.url)}
-          style={{ ...buttonStyle, color: '#d51a1a' }}
-          title="Copy Meeting Link"
-        >
-          <Link2 size={18} />
-        </button>
-      </div>
-    </div>
-            )
-      default:
-        return null;
+  const minimizeApp = () => {
+    const overlay = (window as unknown as { overlay?: { minimizeApp?: () => void } }).overlay
+    if (overlay?.minimizeApp) {
+      overlay.minimizeApp()
+      return
     }
+    recallElectronAPI?.send('minimize-app', undefined)
   }
+
+  const openExternal = (url: string) => {
+    const overlay = (window as unknown as { overlay?: { openExternal?: (u: string) => void } }).overlay
+    if (overlay?.openExternal) {
+      overlay.openExternal(url)
+      return
+    }
+    recallElectronAPI?.send('open-external', url)
+  }
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'transparent' : 'dark'
+    setTheme(newTheme)
+    document.body.style.backgroundColor = 'transparent'
+  }
+
+  const openDashboard = () => {
+    openExternal('http://vitt-health-insurance.netlify.app/')
+  }
+  const toggleSettingsPage = () => {
+    setSelectedTab((prev) => (prev === 'settings' ? 'chat' : 'settings'))
+  }
+
+  const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
+  const sessionid = (currentUser as { sessionuid?: string })?.sessionuid ?? (sessionuidRef.current ?? '')
 
   return (
-    <div className='drag-region'>
-      <div className="card drag-region" id="card" >
-        <div className="card-header drag-region">
-          <div className="title">
-            <span className="dot"></span>
+    <div className="drag-region">
+      <div
+        className="card app4-card drag-region"
+        id="card"
+        data-theme={theme}
+        style={{ ['--bg-opacity' as string]: transparency / 100 }}
+      >
+        <div className="app4-header drag-region">
+          <div className="app4-title">
+            <span className="dot" />
             <span>Vitt Overlay</span>
           </div>
-      <div className="header-actions no-drag flex items-center gap-2">
-        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Settings" onClick={toggleTheme}>
-          {
-            theme==='dark' ?
-            <SunMedium strokeWidth={2} color="white" size={20}/>
-            :
-            <SunMoon strokeWidth={2} color={"white"} size={20}/>
-          }
-          {/* <SunMedium strokeWidth={2} color="#f0f0f0" size={20}/>
-          <SunMoon strokeWidth={2} color={"#f0f0f0"} size={20}/> */}
-        </button>
-        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Notifications">🔔</button>
-        <button className="p-2 rounded-full hover:bg-neutral-700 transition" title="Quit" onClick={closeApp} style={{fontSize:'0.85rem'}}>❌</button>
-        <button onClick={logoutBtn} title="Logout" className="p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition">
-          <Power size={18} />
-        </button>
-      </div>
-
+          <div className="app4-actions no-drag">
+            <button type="button" className="btn-icon" onClick={openDashboard} title="Dashboard">
+              <LayoutDashboard size={18} />
+            </button>
+            <button type="button" className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
+              {theme === 'dark' ? <SunMedium size={18} /> : <SunMoon size={18} />}
+            </button>
+            <button
+              type="button"
+              className={`btn-icon ${selectedTab === 'settings' ? 'active' : ''}`}
+              onClick={toggleSettingsPage}
+              title="Settings"
+            >
+              <Settings size={18} />
+            </button>
+            <button type="button" className="btn-icon" onClick={minimizeApp} title="Minimize">
+              <Minus size={18} />
+            </button>
+            <button type="button" className="btn-icon danger" onClick={closeApp} title="Quit">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="no-drag" style={{ padding: '0 12px 2px', fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
+          {currentTime}
+        </div>
+        <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, color: isServerConnected ? '#22c55e' : '#ef4444' }}>
+          {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
         </div>
 
-         {/* {
-          !VAD2.loading ? 
-         <CustomFillButtonWithIcon 
-          color="#8236f5" 
-          text="" 
-          icon={faMicrophoneAlt}
-          style={{
-            backgroundColor: manualVadStatus ? 'red' : 'gray'
-          }}
-          //className={wasClosedByUserRef.current?"":"hidden"}
-          iconComp={<FontAwesomeIcon icon={faMicrophoneAlt} style={{ fontSize: '2rem' }} />} 
-          onClick={() => setManualVadStatus((p) => !p)}
-        />
-        
-        : 
-        <div style={{}}>
-            <TailSpin stroke="red"  strokeOpacity={1} speed={.95} style={{margin:'2rem'}}/>
-        </div>
-        } */}
+        <div className="status-section no-drag"></div>
 
-      
-      <section className="status-bar no-drag" style={{display:'flex',justifyContent:'space-around'}}>
-          <p id="meeting_id" style={{fontSize:'0.8rem'}}></p>
-          <div onClick={copyToClipboard} ><Copy size={20}/></div>
-      </section>
-      <section className="status-bar no-drag" style={{display:'flex',justifyContent:'space-around'}}>
-          {renderMeetingDetected(meetingDetected)}
-      </section>
-      <section className="control-panel no-drag">
-          {
-            sdkState.permissions_granted ?
-              <div className="recording-controls" style={{margin:'0 auto',width:'fit-content',display:'flex'}}>
-                <button
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
-                  disabled={sdkState.recording }
-                  onClick={() => {
-                    console.log('sdk state',sdkState);
-                    recallElectronAPI.send("message-from-renderer", {
-                      command: "start-recording"
-                    });
-
-                   // setCanTryStart(false);
-
-                    // setTimeout(function () {
-                    //   if (!sdkState.recording)
-                    //     setCanTryStart(true);
-                    // }, 5000);
-                  }}
-                >
-                  <Mic strokeWidth={2} size={20} />
-                  Start 
-                </button>
-                <button
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
-                  disabled={!sdkState.recording}
-                  onClick={() => {
-                    recallElectronAPI.send("message-from-renderer", {
-                      command: "stop-recording"
-                    });
-                  }}
-                >
-                  <Pause strokeWidth={2} size={20} />
-                  Pause
-                </button>
-                  {/* <button
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm"
-                 
-                >
-                  
-                  
-                  
-                </button> */}
-
-              </div>
-            :
-            <div className="recording-controls">Permissions haven't been granted yet! Please do so in Settings.</div>
-          }
-      </section>
-        <div className="list no-drag" style={{overflowY:'scroll',scrollBehavior:'smooth',height:'55vh'}}>
-          {renderChildren()}
+        <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+          {selectedTab === 'chat' && (
+            <ChatWithAITab setCopyToast={setCopyToast} userid={userid} sessionid={sessionid} />
+          )}
+          {selectedTab === 'settings' && (
+            <SettingsTab
+              transparency={transparency}
+              setTransparency={setTransparency}
+              currentUser={currentUser}
+              openExternal={openExternal}
+            />
+          )}
         </div>
 
-        <div className="footer no-drag">
-          <button className="tool" onClick={()=>setSelectedTab('transcript')} style={{backgroundColor:selectedTab==='transcript'?'rgba(0,0,0,0.25)':'transparent'}}>
-            <div className="t-ic">📝</div>
-            <div className="t-txt" 
-          //  style={{color:selectedTab==='transcript'?'white':'rgba(0,0,0,0.5)'}}
-            >Transcript</div>
-          </button>
-          <button className="tool"
-            onClick={()=>setSelectedTab('uploads')}
-            style={{backgroundColor:selectedTab==='uploads'?'rgba(0,0,0,0.25)':'transparent'}}
-          >
-            <div className="t-ic">🤖</div>
-            <div className="t-txt" 
-           // style={{color:'rgba(0,0,0,0.5)'}}
-            >Uploads</div>
-          </button>
-          <button className="tool">
-            <div className="t-ic">🤖</div>
-            <div className="t-txt" 
-           // style={{color:'rgba(0,0,0,0.5)'}}
-            >Chat with AI</div>
-          </button>
-          <button className="tool" 
-          onClick={()=>setSelectedTab('prompts')} 
-          style={{backgroundColor:selectedTab==='prompts'?'rgba(0,0,0,0.25)':'transparent'}}
-          >
-            <div className="t-ic" >📊</div>
-            <div className="t-txt"  
-           // style={{color:selectedTab==='prompts'?'white':'rgba(0,0,0,0.5)'}}
-            >Prompts</div>
-          </button>
-          {/* <button className="tool">
-            <div className="t-ic">⚙️</div>
-            <div className="t-txt">Settings</div>
-          </button> */}
+        <div className="toast-container">
+          <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
         </div>
-
-        <div className="state no-drag">Click-through: <b id="state">ON</b> • Toggle with <span className="kbd">⌥ + `</span></div>
+        <div className="bottom-hint no-drag">
+          Click-through: <b id="state">ON</b> • ⌥ + `
+        </div>
       </div>
     </div>
   )
 }
-
-export default App
