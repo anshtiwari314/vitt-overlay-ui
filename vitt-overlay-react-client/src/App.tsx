@@ -12,9 +12,11 @@ import {
   BotMessageSquare,
   CheckCircle2,
   Cloud,
+  Copy,
   Database,
   FileText,
   LayoutDashboard,
+  Link2,
   Loader2,
   LogOut,
   Mic,
@@ -27,6 +29,9 @@ import {
   UploadCloud,
   X
 } from 'lucide-react'
+import GMeetIcon from './assets/g-meet.png'
+import ZoomIcon from './assets/zoom.png'
+import TeamsIcon from './assets/teams.png'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
@@ -498,9 +503,9 @@ export default function App() {
   const [isSuggesting, setIsSuggesting] = useState(false)
   const selectedTabRef = useRef(selectedTab)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [detectedMeeting, setDetectedMeeting] = useState<{
-    window?: { id?: string; title?: string; url?: string; platform?: string }
-  } | null>(null)
+  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string }[]>([])
+  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
+  const [copyToast, setCopyToast] = useState(false)
 
   const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string } | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -592,8 +597,28 @@ export default function App() {
   useEffect(() => {
     if (!recallElectronAPI) return
     recallElectronAPI.on('state', (newState: unknown) => setSdkState(newState as typeof sdkState))
-    recallElectronAPI.on('meeting-detected', (evt: unknown) => setDetectedMeeting(evt as typeof detectedMeeting))
-    recallElectronAPI.on('meeting-closed', () => setDetectedMeeting(null))
+    recallElectronAPI.on('meeting-detected', (evt: unknown) => {
+      const e = evt as { window?: { id: string; platform: string; url?: string } }
+      const newMeeting = e?.window
+      if (!newMeeting) return
+      setMeetings((prev) => {
+        if (prev.find((m) => m.id === newMeeting.id)) return prev
+        const updated = [...prev, newMeeting]
+        if (updated.length === 1) setActiveMeetingId(newMeeting.id)
+        return updated
+      })
+    })
+    recallElectronAPI.on('meeting-closed', (evt: unknown) => {
+      const e = evt as { window?: { id?: string } }
+      const closedId = e?.window?.id
+      if (!closedId) {
+        setMeetings([])
+        setActiveMeetingId(null)
+        return
+      }
+      setMeetings((prev) => prev.filter((m) => m.id !== closedId))
+      setActiveMeetingId((prev) => (prev === closedId ? null : prev))
+    })
     recallElectronAPI.send('message-from-renderer', { command: 'renderer-ready' })
     return () => {
       recallElectronAPI.removeAllListeners('state')
@@ -601,6 +626,12 @@ export default function App() {
       recallElectronAPI.removeAllListeners('meeting-closed')
     }
   }, [])
+
+  useEffect(() => {
+    if (meetings.length === 0) return
+    const currentActiveExists = activeMeetingId != null && meetings.some((m) => m.id === activeMeetingId)
+    if (!currentActiveExists) setActiveMeetingId(meetings[0].id)
+  }, [meetings, activeMeetingId])
 
   const dispatch = useDispatch()
   const dispatchRef = useRef(dispatch)
@@ -789,6 +820,72 @@ export default function App() {
     setaccess_token('')
   }
 
+  const copyToClipboard = (value?: string) => {
+    if (!value) return
+    try {
+      navigator.clipboard.writeText(value)
+      setCopyToast(true)
+      setTimeout(() => setCopyToast(false), 1500)
+    } catch (e) {
+      console.error('copy failed', e)
+    }
+  }
+
+  const getIconForPlatform = (platform: string) => {
+    if (platform === 'zoom') return ZoomIcon
+    if (platform === 'google-meet') return GMeetIcon
+    if (platform === 'teams') return TeamsIcon
+    return null
+  }
+
+  const renderMeetingStatus = () => {
+    if (activeMeetingId) {
+      const meeting = meetings.find((m) => m.id === activeMeetingId)
+      if (!meeting) return null
+      const icon = getIconForPlatform(meeting.platform)
+      const name = meeting.platform === 'google-meet'
+        ? 'Google Meet'
+        : (meeting.platform?.charAt(0).toUpperCase() ?? '') + (meeting.platform?.slice(1) ?? '')
+      return (
+        <div className="meeting-card no-drag">
+          <div className="meeting-card-close" onClick={() => setActiveMeetingId(null)}>
+            <X size={12} />
+          </div>
+          <div className="meeting-info">
+            <div className="meeting-icon">
+              {icon ? <img src={icon} alt={name} /> : null}
+            </div>
+            <div className="meeting-details">
+              <span className="meeting-label">Meeting Detected</span>
+              <span className="meeting-platform">{name}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.id)} title="Copy ID">
+              <Copy size={16} />
+            </button>
+            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.url)} title="Copy Link">
+              <Link2 size={16} />
+            </button>
+          </div>
+        </div>
+      )
+    }
+    if (meetings.length > 0) {
+      return (
+        <div className="meeting-list no-drag">
+          <span className="meeting-list-label">Meetings:</span>
+          {meetings.map((m) => (
+            <div key={m.id} className="meeting-list-item" onClick={() => setActiveMeetingId(m.id)} title={`Open ${m.platform}`}>
+              {getIconForPlatform(m.platform) ? <img src={getIconForPlatform(m.platform) ?? ''} alt={m.platform} /> : null}
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return null
+  }
+
   const triggerSuggest = () => {
     if (isSuggesting) return
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
@@ -834,71 +931,9 @@ export default function App() {
           </div>
         </div>
 
-        {detectedMeeting && (
-          <div
-            className="no-drag meeting-detected-banner"
-            style={{
-              margin: '4px 12px 6px',
-              padding: '8px 10px',
-              borderRadius: 8,
-              background: sdkState.recording
-                ? 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.08))'
-                : 'linear-gradient(135deg, rgba(96,165,250,0.18), rgba(96,165,250,0.08))',
-              border: `1px solid ${sdkState.recording ? 'rgba(34,197,94,0.45)' : 'rgba(96,165,250,0.45)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: sdkState.recording ? '#22c55e' : '#60a5fa',
-                boxShadow: sdkState.recording ? '0 0 6px #22c55e' : '0 0 6px #60a5fa',
-                animation: 'pulse 1.4s ease-in-out infinite'
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>
-                {sdkState.recording ? 'Recording meeting' : 'Meeting detected'}
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: 'rgba(255,255,255,0.7)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
-                title={detectedMeeting.window?.title || detectedMeeting.window?.url || ''}
-              >
-                {detectedMeeting.window?.platform ? `${detectedMeeting.window.platform} · ` : ''}
-                {detectedMeeting.window?.title || detectedMeeting.window?.url || 'Unknown meeting'}
-              </div>
-            </div>
-            {!sdkState.recording ? (
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ padding: '4px 10px', fontSize: 11, minHeight: 0 }}
-                onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'start-recording' })}
-              >
-                <Mic size={12} /> Record
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ padding: '4px 10px', fontSize: 11, minHeight: 0 }}
-                onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'stop-recording' })}
-              >
-                <Pause size={12} /> Stop
-              </button>
-            )}
-          </div>
-        )}
+        <div className="status-section no-drag" style={{ padding: '0 12px' }}>
+          {renderMeetingStatus()}
+        </div>
 
         <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -912,8 +947,6 @@ export default function App() {
             {isSuggesting ? 'Thinking...' : 'Suggest'}
           </button>
         </div>
-
-        <div className="status-section no-drag" />
 
         {selectedTab !== 'settings' && (
           <div className="controls-section no-drag">
@@ -969,6 +1002,10 @@ export default function App() {
           <TabButton active={selectedTab === 'chat'} onClick={() => handleTabSelect('chat')} icon={<BotMessageSquare size={18} />} label="AI Chat" hasUnread={unreadTabs.has('chat')} />
           <TabButton active={selectedTab === 'prompts'} onClick={() => handleTabSelect('prompts')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('prompts')} />
           <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
+        </div>
+
+        <div className="toast-container">
+          <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
         </div>
 
         <div className="bottom-hint no-drag">
