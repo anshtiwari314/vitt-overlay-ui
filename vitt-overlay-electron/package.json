@@ -17,6 +17,7 @@
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.1.0",
     "@fortawesome/react-fontawesome": "^3.1.0",
+    "@recallai/desktop-sdk": "^2.0.4",
     "@reduxjs/toolkit": "^2.9.0",
     "@ricky0123/vad-react": "^0.0.30",
     "axios": "^1.13.2",
