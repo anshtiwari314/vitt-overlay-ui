@@ -7,6 +7,9 @@ export type ChatMessage = {
   timestamp?: string;
 };
 
+const buildMessageId = (role: ChatMessage["role"]) =>
+  `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
 const initialState: { messages: ChatMessage[] } = {
   messages: [],
 };
@@ -17,7 +20,7 @@ const chatWithAISlice = createSlice({
   reducers: {
     addOutgoingMessage: (state, action: { payload: { content: string; timestamp?: string } }) => {
       state.messages.push({
-        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id: buildMessageId("user"),
         role: "user",
         content: action.payload.content,
         timestamp: action.payload.timestamp,
@@ -30,12 +33,50 @@ const chatWithAISlice = createSlice({
       const { content = [], res_timestamp } = action.payload;
       content.forEach((html) => {
         state.messages.push({
-          id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          id: buildMessageId("assistant"),
           role: "assistant",
           content: html,
           timestamp: res_timestamp,
         });
       });
+    },
+    addConversationTurn: (
+      state,
+      action: {
+        payload: {
+          transcript?: string;
+          support_reply?: string;
+          res_timestamp?: string;
+        };
+      }
+    ) => {
+      const { transcript, support_reply, res_timestamp } = action.payload;
+      const trimmedTranscript = transcript?.trim();
+      const trimmedReply = support_reply?.trim();
+      const lastMessage = state.messages[state.messages.length - 1];
+
+      if (trimmedTranscript) {
+        const shouldAppendTranscript =
+          lastMessage?.role !== "user" || lastMessage.content.trim() !== trimmedTranscript;
+
+        if (shouldAppendTranscript) {
+          state.messages.push({
+            id: buildMessageId("user"),
+            role: "user",
+            content: trimmedTranscript,
+            timestamp: res_timestamp,
+          });
+        }
+      }
+
+      if (trimmedReply) {
+        state.messages.push({
+          id: buildMessageId("assistant"),
+          role: "assistant",
+          content: trimmedReply,
+          timestamp: res_timestamp,
+        });
+      }
     },
     clearChat: (state) => {
       state.messages = [];
@@ -43,5 +84,5 @@ const chatWithAISlice = createSlice({
   },
 });
 
-export const { addOutgoingMessage, addIncomingMessages, clearChat } = chatWithAISlice.actions;
+export const { addOutgoingMessage, addIncomingMessages, addConversationTurn, clearChat } = chatWithAISlice.actions;
 export default chatWithAISlice.reducer;

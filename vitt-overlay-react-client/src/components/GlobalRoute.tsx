@@ -1,23 +1,13 @@
-import React from 'react'
+import type React from 'react'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import {Route,redirect,Navigate} from 'react-router-dom'
 
-//@ts-ignore
-export default function GlobalRoute({component,...rest}) {
-    
-    //console.log("helo world")
-    //@ts-ignore
-    const {currentUser} = useAuth()
-    
-    console.log('global route',component,currentUser)
+export default function GlobalRoute({ component }: { component: React.ReactNode }) {
+  const { currentUser } = useAuth()
 
-    if(currentUser === null){
-        return component
-    }
-    else {
-        // console.log("trying redirecting")
-        // redirect("/")
-     //  window.location.href = '/'
-     return <Navigate to="/app" replace />
-    }
+  if (currentUser === null) {
+    return component
+  }
+
+  return <Navigate to="/app" replace />
 }

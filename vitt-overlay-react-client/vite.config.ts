@@ -8,7 +8,7 @@ export default defineConfig({
   // inside the packaged Electron app.
   base: './',
   server: {
-    port: 5173,
+    port: 5174,
     strictPort: true, // Prevents Vite from trying a different port if 5173 is busy
     hmr: {
       protocol: 'ws',

@@ -10,18 +10,20 @@ let tray;
 let isClickThrough = true;
 
 function createWindow() {
-  const width = 380;
-  const height = 600;
+  const width = 420;
+  const height = 680;
 
   win = new BrowserWindow({
     width,
     height,
+    minWidth: 380,
+    minHeight: 600,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: true,
     alwaysOnTop: true,
-    resizable: false,
+    resizable: true,
     maximizable: false,
     skipTaskbar: false,
     fullscreenable: false,
@@ -59,7 +61,7 @@ function createWindow() {
   });
 
   if (!app.isPackaged) {
-    win.loadURL('http://localhost:5173');
+    win.loadURL('http://localhost:5174');
   } else {
     const clientDistIndex = path.join(process.resourcesPath, 'client-dist', 'index.html');
     win.loadFile(clientDistIndex);
