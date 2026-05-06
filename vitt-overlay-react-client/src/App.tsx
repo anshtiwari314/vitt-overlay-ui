@@ -559,6 +559,9 @@ export default function App() {
     permissions_granted: true,
     meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
   })
+  const [detectedMeeting, setDetectedMeeting] = useState<{
+    window?: { id?: string; title?: string; url?: string; platform?: string }
+  } | null>(null)
 
   const { currentUser } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string } | null }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -595,8 +598,14 @@ export default function App() {
   useEffect(() => {
     if (!recallElectronAPI) return
     recallElectronAPI.on('state', (newState: unknown) => setSdkState(newState as typeof sdkState))
+    recallElectronAPI.on('meeting-detected', (evt: unknown) => setDetectedMeeting(evt as typeof detectedMeeting))
+    recallElectronAPI.on('meeting-closed', () => setDetectedMeeting(null))
     recallElectronAPI.send('message-from-renderer', { command: 'renderer-ready' })
-    return () => recallElectronAPI.removeAllListeners('state')
+    return () => {
+      recallElectronAPI.removeAllListeners('state')
+      recallElectronAPI.removeAllListeners('meeting-detected')
+      recallElectronAPI.removeAllListeners('meeting-closed')
+    }
   }, [])
 
   const dispatch = useDispatch()
@@ -804,6 +813,72 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {detectedMeeting && (
+          <div
+            className="no-drag meeting-detected-banner"
+            style={{
+              margin: '4px 12px 6px',
+              padding: '8px 10px',
+              borderRadius: 8,
+              background: sdkState.recording
+                ? 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.08))'
+                : 'linear-gradient(135deg, rgba(96,165,250,0.18), rgba(96,165,250,0.08))',
+              border: `1px solid ${sdkState.recording ? 'rgba(34,197,94,0.45)' : 'rgba(96,165,250,0.45)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: sdkState.recording ? '#22c55e' : '#60a5fa',
+                boxShadow: sdkState.recording ? '0 0 6px #22c55e' : '0 0 6px #60a5fa',
+                animation: 'pulse 1.4s ease-in-out infinite'
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>
+                {sdkState.recording ? 'Recording meeting' : 'Meeting detected'}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: 'rgba(255,255,255,0.7)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+                title={detectedMeeting.window?.title || detectedMeeting.window?.url || ''}
+              >
+                {detectedMeeting.window?.platform ? `${detectedMeeting.window.platform} · ` : ''}
+                {detectedMeeting.window?.title || detectedMeeting.window?.url || 'Unknown meeting'}
+              </div>
+            </div>
+            {!sdkState.recording ? (
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ padding: '4px 10px', fontSize: 11, minHeight: 0 }}
+                onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'start-recording' })}
+              >
+                <Mic size={12} /> Record
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ padding: '4px 10px', fontSize: 11, minHeight: 0 }}
+                onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'stop-recording' })}
+              >
+                <Pause size={12} /> Stop
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="no-drag" style={{ padding: '0 12px 2px', fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
           {currentTime}

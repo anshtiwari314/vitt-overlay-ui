@@ -1,13 +1,139 @@
-import { app, BrowserWindow, ipcMain, shell, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const envCandidates = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '.env'),
+  path.join(process.resourcesPath, '.env'),
+  path.join(process.resourcesPath, 'app', '.env'),
+];
+
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('Loaded environment from:', envPath);
+    break;
+  }
+}
+
+import { app, BrowserWindow, ipcMain, shell, dialog, Notification, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
+import RecallAiSdk from '@recallai/desktop-sdk';
+
 let win;
 let tray;
 let isClickThrough = true;
+
+let detectedMeeting = null;
+let state = {
+  recording: false,
+  permissions_granted: true,
+  meetings: [],
+};
+
+function sendState() {
+  try {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('state', state);
+    }
+  } catch (e) {
+    console.error('Failed to send message to renderer:', e);
+  }
+}
+
+function revealWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+  try {
+    win.flashFrame(true);
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.flashFrame(false);
+    }, 3000);
+  } catch (e) {}
+}
+
+function getFormattedDate() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours %= 12;
+  hours ||= 12;
+  const formattedHours = String(hours).padStart(2, '0');
+  return `${month}-${day}-${year} ${formattedHours}:${minutes} ${ampm}`;
+}
+
+async function createDesktopSdkUpload() {
+  const url = `${process.env.RECALLAI_API_URL}/api/v1/sdk-upload/`;
+
+  const response = await axios.post(url, {
+    recording_config: {
+      video_mixed_mp4: null,
+      audio_mixed_mp3: {},
+      realtime_endpoints: [
+        {
+          type: 'desktop_sdk_callback',
+          events: ['audio_mixed_raw.data']
+        },
+      ],
+    }
+  }, {
+    headers: { 'Authorization': `Token ${process.env.RECALLAI_API_KEY}` },
+    timeout: 3000,
+  });
+
+  return response.data;
+}
+
+async function startRecording(windowId) {
+  console.log('recording started', windowId);
+
+  try {
+    const { upload_token } = await createDesktopSdkUpload();
+
+    if (!upload_token) {
+      throw new Error('No upload token received from the server.');
+    }
+
+    RecallAiSdk.startRecording({
+      windowId: windowId,
+      uploadToken: upload_token
+    });
+
+    await RecallAiSdk.requestPermission('accessibility');
+    await RecallAiSdk.requestPermission('microphone system-audio');
+    await RecallAiSdk.requestPermission('system-audio');
+
+    console.log('Permissions requested');
+
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('current-window-id', windowId);
+    }
+  } catch (error) {
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+    }
+    console.error('Error in startRecording:', error.message);
+
+    dialog.showErrorBox(
+      'Recording Error',
+      `Failed to start recording:\n${error.message}`
+    );
+
+    if (process.platform === 'darwin') app.dock.bounce('critical');
+  }
+}
 
 function createWindow() {
   const width = 420;
@@ -45,14 +171,10 @@ function createWindow() {
     win.setAlwaysOnTop(true, 'screen-saver');
   } catch (_e) {}
   win.on('minimize', () => {
-    try {
-      win.setAlwaysOnTop(false);
-    } catch (_e) {}
+    try { win.setAlwaysOnTop(false); } catch (_e) {}
   });
   win.on('restore', () => {
-    try {
-      win.setAlwaysOnTop(true, 'screen-saver');
-    } catch (_e) {}
+    try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (_e) {}
   });
   win.on('show', () => {
     try {
@@ -77,6 +199,8 @@ function createWindow() {
   win.setPosition(x, y);
 
   nativeTheme.themeSource = 'dark';
+
+  console.log('=== Initial state:', state);
 }
 
 function toggleClickThrough() {
@@ -157,6 +281,146 @@ app.whenReady().then(() => {
     // Keep app alive like standard tray apps.
   });
 
+  console.log('recall', RecallAiSdk);
+
+  RecallAiSdk.addEventListener('permission-status', async (evt) => {
+    const { permission, status } = evt;
+    console.log(`Permission: ${permission}, Status: ${status}`);
+  });
+
+  RecallAiSdk.addEventListener('permissions-granted', async () => {
+    console.log('Permissions granted, ready to record');
+    state.permissions_granted = true;
+    setInterval(sendState, 1000);
+  });
+
+  RecallAiSdk.addEventListener('meeting-updated', async (evt) => {
+    console.log('Meeting updated', evt);
+  });
+
+  RecallAiSdk.addEventListener('realtime-event', async (evt) => {
+    console.log('realtime event', evt);
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('recall-buffer', evt);
+    }
+  });
+
+  RecallAiSdk.addEventListener('media-capture-status', async (evt) => {
+    console.log(evt);
+  });
+
+  RecallAiSdk.addEventListener('error', async (evt) => {
+    const { type, message } = evt;
+
+    if (type === 'upload') {
+      for (const meeting of state.meetings) {
+        if (meeting.id === evt.window.id) meeting.status = 'failed';
+      }
+      sendState();
+      dialog.showErrorBox('Upload error', `There was an error uploading the recording. Reason: ${message}`);
+    } else {
+      dialog.showErrorBox('Error', `An error occurred. Reason: ${type} -- ${message}`);
+    }
+
+    new Notification({
+      title: 'Error',
+      body: 'An error occured.',
+    }).show();
+
+    revealWindow();
+
+    if (process.platform === 'darwin') app.dock.bounce('critical');
+
+    console.error('ERROR: ', type, message);
+  });
+
+  RecallAiSdk.addEventListener('upload-progress', async (evt) => {
+    for (const meeting of state.meetings) {
+      if (meeting.id === evt.window.id) meeting.uploadPercentage = evt.progress;
+      if (evt.progress === 100) meeting.status = 'completed';
+    }
+    sendState();
+  });
+
+  RecallAiSdk.addEventListener('recording-ended', async (evt) => {
+    state.meetings.push({ title: getFormattedDate(), id: evt.window.id, uploadPercentage: 0, status: 'in-progress' });
+    sendState();
+    RecallAiSdk.uploadRecording({ windowId: evt.window.id });
+  });
+
+  RecallAiSdk.addEventListener('meeting-closed', async (evt) => {
+    console.log('MEETING CLOSED', evt);
+    detectedMeeting = null;
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('meeting-closed', evt);
+    }
+  });
+
+  RecallAiSdk.addEventListener('meeting-detected', async (evt) => {
+    console.log('MEETING DETECTED', evt);
+    detectedMeeting = evt;
+
+    setTimeout(() => {
+      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+        win.webContents.send('meeting-detected', evt);
+      }
+    }, 500);
+
+    const notif = new Notification({
+      title: 'Meeting detected',
+      body: 'Click here to record the meeting.',
+      actions: [
+        { type: 'button', text: 'Record' },
+        { type: 'button', text: 'Ignore' }
+      ]
+    });
+
+    notif.on('action', async (_action, index) => {
+      if (index === 0) await startRecording(evt.window.id);
+    });
+
+    notif.on('click', async () => {
+      await startRecording(evt.window.id);
+    });
+
+    notif.show();
+    revealWindow();
+  });
+
+  RecallAiSdk.addEventListener('sdk-state-change', (event) => {
+    try {
+      switch (event.sdk.state.code) {
+        case 'recording':
+          if (process.platform === 'darwin') app.dock.setBadge('Recording');
+          console.log('=== Recording started:', event);
+          state.recording = true;
+          sendState();
+          break;
+        case 'idle':
+          if (process.platform === 'darwin') app.dock.setBadge('');
+          console.log('=== Recording idle:', event);
+          state.recording = false;
+          sendState();
+          break;
+        case 'paused':
+          if (process.platform === 'darwin') app.dock.setBadge('Paused');
+          console.log('=== Recording paused:', event);
+          state.recording = false;
+          sendState();
+          break;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  RecallAiSdk.init({
+    api_url: process.env.RECALLAI_API_URL,
+    acquirePermissionsOnStartup: ['microphone', 'accessibility', 'system-audio'],
+    config: {},
+    restartOnError: true
+  });
+
   ipcMain.on('close-app', () => {
     app.quit();
   });
@@ -169,17 +433,29 @@ app.whenReady().then(() => {
     shell.openExternal(url);
   });
 
-  ipcMain.on('message-from-renderer', (_event, arg) => {
+  ipcMain.on('message-from-renderer', async (_event, arg) => {
+    console.log('message-from-renderer', arg);
     if (!arg || !arg.command) return;
-    if (arg.command === 'renderer-ready') {
-      // Keep compatibility with renderer IPC path.
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('state', {
-          recording: false,
-          permissions_granted: true,
-          meetings: []
-        });
-      }
+    switch (arg.command) {
+      case 'renderer-ready':
+        console.log('Renderer is ready, sending initial state');
+        sendState();
+        break;
+      case 'reupload':
+        RecallAiSdk.uploadRecording({ windowId: arg.id });
+        break;
+      case 'start-recording':
+        if (!detectedMeeting) {
+          dialog.showMessageBoxSync(null, { message: 'There is no meeting in progress.' });
+          break;
+        }
+        await startRecording(detectedMeeting.window.id);
+        break;
+      case 'stop-recording':
+        if (detectedMeeting) {
+          RecallAiSdk.stopRecording({ windowId: detectedMeeting.window.id });
+        }
+        break;
     }
   });
 });

@@ -4,33 +4,51 @@ console.log("Preload loaded");
 
 contextBridge.exposeInMainWorld('overlay', {
   onClickThrough: (cb) => ipcRenderer.on('overlay:clickThrough', (_e, val) => cb(val)),
-  somethingHappened:(cb)=> ipcRenderer.on('something-happened',(_e,data)=>cb(data)),
+  somethingHappened: (cb) => ipcRenderer.on('something-happened', (_e, data) => cb(data)),
+  getRecallBuffer: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('recall-buffer', subscription);
+    return () => ipcRenderer.removeListener('recall-buffer', subscription);
+  },
+  getMeetingId: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('current-window-id', subscription);
+    return () => ipcRenderer.removeListener('current-window-id', subscription);
+  },
+  meetingDetected: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('meeting-detected', subscription);
+    return () => ipcRenderer.removeListener('meeting-detected', subscription);
+  },
+  meetingClosed: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('meeting-closed', subscription);
+    return () => ipcRenderer.removeListener('meeting-closed', subscription);
+  },
   quitApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
   openExternal: (url) => ipcRenderer.send('open-external', url)
 });
 
-contextBridge.exposeInMainWorld('electronAPI',{
-   ipcRenderer: {
+contextBridge.exposeInMainWorld('electronAPI', {
+  ipcRenderer: {
     send: (channel, data) => {
-      // Whitelist channels
       const validChannels = ['message-from-renderer', 'api-key', 'log', 'close-app', 'minimize-app', 'open-external'];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, data);
       }
     },
     on: (channel, func) => {
-      const validChannels = ['message-from-main', 'state', 'api-key', 'log'];
+      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'meeting-detected', 'meeting-closed', 'current-window-id', 'recall-buffer'];
       if (validChannels.includes(channel)) {
-        // Deliberately strip event as it includes `sender`
-        ipcRenderer.on(channel, (event, ...args) => func(...args));
+        ipcRenderer.on(channel, (_event, ...args) => func(...args));
       }
     },
     removeAllListeners: (channel) => {
-      const validChannels = ['message-from-main', 'state', 'api-key', 'log'];
+      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'meeting-detected', 'meeting-closed', 'current-window-id', 'recall-buffer'];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }
     },
   },
-})
+});
