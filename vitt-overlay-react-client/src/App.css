@@ -135,7 +135,7 @@
 
 .btn-icon.active {
   background: var(--surface-hover);
-  color: var(--text-main);
+  color: var(--accent);
   border-color: var(--border-glass);
 }
 
@@ -357,6 +357,24 @@
   font-size: 13px;
 }
 .link-btn:hover { text-decoration: underline; }
+
+.tab-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-unread-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 1.5px solid rgba(20, 20, 23, 0.9);
+}
 
 .toast-container {
   position: absolute;

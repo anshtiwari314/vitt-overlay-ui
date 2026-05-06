@@ -9,13 +9,19 @@ import parse from 'html-react-parser'
 import ReactHtmlParser from 'html-react-parser'
 import {
   AlertCircle,
+  BotMessageSquare,
   CheckCircle2,
+  Cloud,
+  Database,
+  FileText,
   LayoutDashboard,
   Loader2,
+  LogOut,
   Mic,
   Minus,
   Pause,
-  Send,
+  Settings,
+  Sparkles,
   SunMedium,
   SunMoon,
   UploadCloud,
@@ -124,79 +130,11 @@ function TranscriptionItem({ e }: { e: { speaker?: string; transcription: string
   )
 }
 
-function PromptList({
-  userid,
-  sessionid
-}: {
-  userid: string
-  sessionid: string
-}) {
-  const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
+function PromptList() {
   const prompts = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) => state.promptsReducer.prompts)
-  const [isTriggering, setIsTriggering] = useState(false)
-  const [triggerError, setTriggerError] = useState('')
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    const onResponse = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      setIsTriggering(false)
-    }
-
-    window.addEventListener('chat-response-received', onResponse)
-    return () => {
-      window.removeEventListener('chat-response-received', onResponse)
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
-
-  const triggerPrompt = () => {
-    if (isTriggering) return
-
-    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
-    if (ws?.readyState !== WebSocket.OPEN) {
-      setTriggerError('Backend not connected.')
-      return
-    }
-
-    setTriggerError('')
-    setIsTriggering(true)
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      timeoutRef.current = null
-      setIsTriggering(false)
-      setTriggerError('Request timed out.')
-    }, CHAT_RESPONSE_TIMEOUT_MS)
-
-    ws.send(
-      JSON.stringify({
-        type: 'suggest_me_next',
-        userid,
-        sessionid,
-        query: '',
-        timestamp: getTimeStamp(),
-        prompt_trigger: true
-      })
-    )
-  }
 
   return (
     <div className="content-list">
-      <div className="prompt-toolbar">
-        <button type="button" className="prompt-trigger-btn" onClick={triggerPrompt} disabled={isTriggering}>
-          {isTriggering ? 'Triggering...' : 'Suggest'}
-        </button>
-        {triggerError ? <div className="prompt-trigger-status error">{triggerError}</div> : null}
-      </div>
       {prompts.length === 0 ? (
         <div className="prompt-empty">
           <div className="prompt-empty-title">No AI Assist results yet</div>
@@ -331,35 +269,40 @@ function SettingsTab({
   transparency,
   setTransparency,
   currentUser,
-  openExternal
+  openExternal,
+  onLogout
 }: {
   transparency: number
   setTransparency: (v: number) => void
-  currentUser: { userid?: string; id?: string } | null
+  currentUser: { userid?: string; id?: string; name?: string; email?: string; role?: string } | null
   openExternal: (url: string) => void
+  onLogout: () => void
 }) {
   const [language, setLanguage] = useState('english')
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
+  const displayName = currentUser?.name ?? 'N/A'
+  const displayEmail = currentUser?.email ?? 'N/A'
+  const displayRole = currentUser?.role ?? 'N/A'
 
   return (
     <div className="content-list settings-tab">
       <div className="setting-section">
         <div className="setting-header">Profile</div>
         <div className="setting-row">
+          <span className="setting-label">Name</span>
+          <span className="setting-value">{displayName}</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">Email</span>
+          <span className="setting-value">{displayEmail}</span>
+        </div>
+        <div className="setting-row">
           <span className="setting-label">User ID</span>
           <span className="setting-value">{displayUserId}</span>
         </div>
         <div className="setting-row">
-          <span className="setting-label">Email</span>
-          <span className="setting-value">user@example.com</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Mobile</span>
-          <span className="setting-value">xxxxx92</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Plan</span>
-          <span className="setting-value" style={{ color: 'var(--accent)' }}>Premium</span>
+          <span className="setting-label">Role</span>
+          <span className="setting-value" style={{ color: 'var(--accent)' }}>{displayRole}</span>
         </div>
       </div>
 
@@ -399,16 +342,17 @@ function SettingsTab({
           <span className="setting-label">App Version</span>
           <span className="setting-value">1.0.2</span>
         </div>
-        <div className="setting-row">
-          <span className="setting-label">Last Login</span>
-          <span className="setting-value">Today, 10:30 AM</span>
-        </div>
         <div className="setting-row" style={{ marginTop: 8 }}>
           <span className="link-btn" onClick={() => openExternal('https://vitt-health-insurance.netlify.app/reset-password')}>
             Change Password
           </span>
         </div>
       </div>
+
+      <button type="button" className="logout-btn" onClick={onLogout}>
+        <LogOut size={16} />
+        Logout
+      </button>
     </div>
   )
 }
@@ -523,22 +467,13 @@ function ChatWithAITab({
         <div className="chat-textarea-wrap">
           <textarea
             className="chat-textarea"
-            placeholder="Type a message... (Shift+Enter for new line)"
+            placeholder="Type a message... (Enter to send)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={sending}
             rows={2}
           />
-          <button
-            type="button"
-            className="chat-send-btn"
-            onClick={sendMessage}
-            disabled={sending || !input.trim()}
-            title="Send"
-          >
-            <Send size={20} />
-          </button>
         </div>
       </div>
     </div>
@@ -559,11 +494,24 @@ export default function App() {
     permissions_granted: true,
     meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
   })
+  const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
+  const [isSuggesting, setIsSuggesting] = useState(false)
+  const selectedTabRef = useRef(selectedTab)
+  const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { currentUser } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string } | null }
+  const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string } | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
   const currentUserRef = useRef(currentUser)
   const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
+  const assistantMsgCount = useSelector((state: { chatWithAIReducer: { messages: ChatMessage[] } }) =>
+    state.chatWithAIReducer.messages.filter((m) => m.role === 'assistant').length
+  )
+  const promptsCount = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) =>
+    state.promptsReducer.prompts.length
+  )
+  const prevAssistantMsgCount = useRef(0)
+  const prevPromptsCount = useRef(0)
+  const prevDataLen = useRef(0)
 
   useEffect(() => {
     console.log(
@@ -579,6 +527,52 @@ export default function App() {
     currentUserRef.current = currentUser
     sessionuidRef.current = (currentUser as { sessionuid?: string })?.sessionuid
   }, [currentUser])
+
+  useEffect(() => {
+    selectedTabRef.current = selectedTab
+  }, [selectedTab])
+
+  useEffect(() => {
+    if (assistantMsgCount > prevAssistantMsgCount.current) {
+      if (selectedTabRef.current !== 'chat') {
+        setUnreadTabs((prev) => { const s = new Set(prev); s.add('chat'); return s })
+      }
+    }
+    prevAssistantMsgCount.current = assistantMsgCount
+  }, [assistantMsgCount])
+
+  useEffect(() => {
+    if (promptsCount > prevPromptsCount.current) {
+      if (selectedTabRef.current !== 'prompts') {
+        setUnreadTabs((prev) => { const s = new Set(prev); s.add('prompts'); return s })
+      }
+    }
+    prevPromptsCount.current = promptsCount
+  }, [promptsCount])
+
+  useEffect(() => {
+    if (dataInfoItems.length > prevDataLen.current) {
+      if (selectedTabRef.current !== 'data_info') {
+        setUnreadTabs((prev) => { const s = new Set(prev); s.add('data_info'); return s })
+      }
+    }
+    prevDataLen.current = dataInfoItems.length
+  }, [dataInfoItems.length])
+
+  useEffect(() => {
+    const onResponse = () => {
+      if (suggestTimeoutRef.current) {
+        clearTimeout(suggestTimeoutRef.current)
+        suggestTimeoutRef.current = null
+      }
+      setIsSuggesting(false)
+    }
+    window.addEventListener('chat-response-received', onResponse)
+    return () => {
+      window.removeEventListener('chat-response-received', onResponse)
+      if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const formatNow = () =>
@@ -773,8 +767,31 @@ export default function App() {
     openExternal('http://vitt-health-insurance.netlify.app/')
   }
 
+  const handleTabSelect = (tab: string) => {
+    setSelectedTab(tab)
+    setUnreadTabs((prev) => { const s = new Set(prev); s.delete(tab); return s })
+  }
+
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const sessionid = (currentUser as { sessionuid?: string })?.sessionuid ?? (sessionuidRef.current ?? '')
+
+  const handleLogout = () => {
+    setCurrentUser(null)
+    setaccess_token('')
+  }
+
+  const triggerSuggest = () => {
+    if (isSuggesting) return
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws?.readyState !== WebSocket.OPEN) return
+    setIsSuggesting(true)
+    if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
+    suggestTimeoutRef.current = setTimeout(() => {
+      suggestTimeoutRef.current = null
+      setIsSuggesting(false)
+    }, CHAT_RESPONSE_TIMEOUT_MS)
+    ws.send(JSON.stringify({ type: 'suggest_me_next', userid, sessionid, query: '', timestamp: getTimeStamp(), prompt_trigger: true }))
+  }
 
   return (
     <div className="drag-region">
@@ -796,6 +813,9 @@ export default function App() {
             <button type="button" className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
               {theme === 'dark' ? <SunMedium size={18} /> : <SunMoon size={18} />}
             </button>
+            <button type="button" className={`btn-icon ${selectedTab === 'settings' ? 'active' : ''}`} onClick={() => handleTabSelect('settings')} title="Settings">
+              <Settings size={18} />
+            </button>
             <button type="button" className="btn-icon" onClick={minimizeApp} title="Minimize">
               <Minus size={18} />
             </button>
@@ -805,11 +825,17 @@ export default function App() {
           </div>
         </div>
 
-        <div className="no-drag" style={{ padding: '0 12px 2px', fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
-          {currentTime}
-        </div>
-        <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, color: isServerConnected ? '#22c55e' : '#ef4444' }}>
-          {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
+        <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.75)', marginBottom: 2 }}>{currentTime}</div>
+            <div style={{ color: isServerConnected ? '#22c55e' : '#ef4444' }}>
+              {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
+            </div>
+          </div>
+          <button type="button" className="prompt-trigger-btn" onClick={triggerSuggest} disabled={isSuggesting}>
+            <Sparkles size={13} style={{ marginRight: 4 }} />
+            {isSuggesting ? 'Thinking...' : 'Suggest'}
+          </button>
         </div>
 
         <div className="status-section no-drag" />
@@ -849,7 +875,7 @@ export default function App() {
           {selectedTab === 'transcript' && <TranscriptionList />}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
           {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} />}
-          {selectedTab === 'prompts' && <PromptList userid={userid} sessionid={sessionid} />}
+          {selectedTab === 'prompts' && <PromptList />}
           {selectedTab === 'data_info' && <DataInfoList items={dataInfoItems} />}
           {selectedTab === 'settings' && (
             <SettingsTab
@@ -857,17 +883,17 @@ export default function App() {
               setTransparency={setTransparency}
               currentUser={currentUser}
               openExternal={openExternal}
+              onLogout={handleLogout}
             />
           )}
         </div>
 
-        <div className="tab-bar no-drag" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-          <TabButton active={selectedTab === 'transcript'} onClick={() => setSelectedTab('transcript')} icon="📝" label="Transcript" />
-          <TabButton active={selectedTab === 'uploads'} onClick={() => setSelectedTab('uploads')} icon="☁️" label="Uploads" />
-          <TabButton active={selectedTab === 'chat'} onClick={() => setSelectedTab('chat')} icon="🤖" label="AI Chat" />
-          <TabButton active={selectedTab === 'prompts'} onClick={() => setSelectedTab('prompts')} icon="📊" label="AI Assist" />
-          <TabButton active={selectedTab === 'data_info'} onClick={() => setSelectedTab('data_info')} icon="ℹ️" label="Data" />
-          <TabButton active={selectedTab === 'settings'} onClick={() => setSelectedTab('settings')} icon="⚙️" label="Settings" />
+        <div className="tab-bar no-drag" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <TabButton active={selectedTab === 'transcript'} onClick={() => handleTabSelect('transcript')} icon={<FileText size={18} />} label="Transcript" />
+          {/* <TabButton active={selectedTab === 'uploads'} onClick={() => handleTabSelect('uploads')} icon={<Cloud size={18} />} label="Uploads" /> */}
+          <TabButton active={selectedTab === 'chat'} onClick={() => handleTabSelect('chat')} icon={<BotMessageSquare size={18} />} label="AI Chat" hasUnread={unreadTabs.has('chat')} />
+          <TabButton active={selectedTab === 'prompts'} onClick={() => handleTabSelect('prompts')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('prompts')} />
+          <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
         </div>
 
         <div className="bottom-hint no-drag">
@@ -882,16 +908,21 @@ function TabButton({
   active,
   onClick,
   icon,
-  label
+  label,
+  hasUnread = false
 }: {
   active: boolean
   onClick: () => void
-  icon: string
+  icon: React.ReactNode
   label: string
+  hasUnread?: boolean
 }) {
   return (
     <button type="button" className={`tab-btn ${active ? 'active' : ''}`} onClick={onClick}>
-      <span className="tab-icon">{icon}</span>
+      <span className="tab-icon-wrap">
+        {icon}
+        {hasUnread && !active && <span className="tab-unread-dot" />}
+      </span>
       <span className="tab-label">{label}</span>
     </button>
   )

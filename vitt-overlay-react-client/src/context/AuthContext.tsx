@@ -24,8 +24,24 @@ type AuthContextValue = {
 
 const AUTH_STORAGE_KEY = 'vitt-overlay-auth-user'
 const TOKEN_STORAGE_KEY = 'vitt-overlay-access-token'
+const LOGIN_BYPASS_ENABLED = import.meta.env.VITE_BYPASS_LOGIN === 'true'
 
 const Auth = createContext<AuthContextValue | null>(null)
+
+function getBypassUser() {
+  if (!LOGIN_BYPASS_ENABLED) {
+    return null
+  }
+
+  return {
+    userid: 'dev-user',
+    id: 'dev-user',
+    sessionuid: uuidv4(),
+    name: 'Dev User',
+    email: 'dev@local.test',
+    role: 'Dev Bypass'
+  }
+}
 
 function readStoredUser() {
   if (typeof window === 'undefined') {
@@ -34,7 +50,7 @@ function readStoredUser() {
 
   const stored = window.localStorage.getItem(AUTH_STORAGE_KEY)
   if (!stored) {
-    return null
+    return getBypassUser()
   }
 
   try {
@@ -45,7 +61,7 @@ function readStoredUser() {
     }
   } catch {
     window.localStorage.removeItem(AUTH_STORAGE_KEY)
-    return null
+    return getBypassUser()
   }
 }
 
@@ -67,9 +83,10 @@ export function useAuth() {
 }
 
 export default function AuthContext({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<AuthUser | null>(() => readStoredUser())
-  const [access_token, setAccessTokenState] = useState(() => readStoredToken())
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(readStoredUser()))
+  const initialUser = readStoredUser()
+  const [currentUser, setCurrentUserState] = useState<AuthUser | null>(initialUser)
+  const [access_token, setAccessTokenState] = useState(() => readStoredToken() || (LOGIN_BYPASS_ENABLED ? 'dev-bypass-token' : ''))
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(initialUser))
   const [loading] = useState(false)
 
   const setCurrentUser: React.Dispatch<React.SetStateAction<AuthUser | null>> = (value) => {

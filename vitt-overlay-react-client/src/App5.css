@@ -793,6 +793,29 @@
 }
 .link-btn:hover { text-decoration: underline; }
 
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  margin-top: 4px;
+  background: rgba(255, 92, 92, 0.1);
+  border: 1px solid rgba(255, 92, 92, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 92, 92, 0.2);
+  border-color: var(--danger);
+}
+
 /* Footer (Tabs) */
 .tab-bar {
   flex-shrink: 0;
@@ -826,11 +849,29 @@
 
 .tab-btn.active {
   background: var(--surface-hover);
-  color: var(--text-main);
+  color: var(--accent);
+}
+
+.tab-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tab-icon { font-size: 18px; }
 .tab-label { font-size: 9px; font-weight: 600; text-transform: uppercase; }
+
+.tab-unread-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 1.5px solid rgba(20, 20, 23, 0.9);
+}
 
 /* Toast & Bottom */
 .toast-container {
