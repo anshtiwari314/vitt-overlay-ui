@@ -29,13 +29,31 @@ import {
   UploadCloud,
   X
 } from 'lucide-react'
-import GMeetIcon from './assets/g-meet.png'
-import ZoomIcon from './assets/zoom.png'
-import TeamsIcon from './assets/teams.png'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
+import GMeetIcon from './assets/g-meet.png'
+import ZoomIcon from './assets/zoom.png'
+import TeamsIcon from './assets/teams.png'
 import type { ChatMessage } from './redux/reducers/chatWithAIReducer'
+
+function getMeetingPlatformIcon(platform?: string | null) {
+  if (!platform) return null
+  const key = platform.toLowerCase()
+  if (key === 'zoom') return ZoomIcon
+  if (key === 'google-meet' || key === 'google_meet' || key === 'googlemeet' || key === 'meet') return GMeetIcon
+  if (key === 'teams' || key === 'msteams' || key === 'microsoft-teams') return TeamsIcon
+  return null
+}
+
+function getMeetingPlatformLabel(platform?: string | null) {
+  if (!platform) return 'Unknown'
+  const key = platform.toLowerCase()
+  if (key === 'zoom') return 'Zoom'
+  if (key === 'google-meet' || key === 'google_meet' || key === 'googlemeet' || key === 'meet') return 'Google Meet'
+  if (key === 'teams' || key === 'msteams' || key === 'microsoft-teams') return 'Microsoft Teams'
+  return platform.charAt(0).toUpperCase() + platform.slice(1)
+}
 
 /** Single shared WebSocket for the app so only one connection exists. */
 let appSharedWs: WebSocket | null = null
@@ -487,7 +505,8 @@ function ChatWithAITab({
 
 export default function App() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
-  const wsUrl = 'ws://localhost:5000/ws'
+  //const wsUrl = 'ws://localhost:5000/ws'
+  const wsUrl = 'wss://8e77-2401-4900-8828-9ca4-a8cc-c80d-372b-5fb3.ngrok-free.app/ws'
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
@@ -499,13 +518,6 @@ export default function App() {
     permissions_granted: true,
     meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
   })
-  const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
-  const [isSuggesting, setIsSuggesting] = useState(false)
-  const selectedTabRef = useRef(selectedTab)
-  const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string }[]>([])
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
-  const [copyToast, setCopyToast] = useState(false)
 
   const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string } | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -520,6 +532,14 @@ export default function App() {
   const prevAssistantMsgCount = useRef(0)
   const prevPromptsCount = useRef(0)
   const prevDataLen = useRef(0)
+
+  const selectedTabRef = useRef(selectedTab)
+  const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
+  const [isSuggesting, setIsSuggesting] = useState(false)
+  const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string; title?: string }[]>([])
+  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
+  const [copyToast, setCopyToast] = useState(false)
 
   useEffect(() => {
     console.log(
@@ -598,7 +618,7 @@ export default function App() {
     if (!recallElectronAPI) return
     recallElectronAPI.on('state', (newState: unknown) => setSdkState(newState as typeof sdkState))
     recallElectronAPI.on('meeting-detected', (evt: unknown) => {
-      const e = evt as { window?: { id: string; platform: string; url?: string } }
+      const e = evt as { window?: { id: string; platform: string; url?: string; title?: string } }
       const newMeeting = e?.window
       if (!newMeeting) return
       setMeetings((prev) => {
@@ -770,6 +790,33 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const overlay = (window as unknown as {
+      overlay?: { getRecallBuffer?: (cb: (d: unknown) => void) => (() => void) | void }
+    }).overlay
+    if (!overlay?.getRecallBuffer) return
+
+    const unsubBuffer = overlay.getRecallBuffer((data: unknown) => {
+      const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+      if (ws?.readyState !== WebSocket.OPEN) return
+      ws.send(
+        JSON.stringify({
+          type: 'recall-buffer',
+          userid:
+            (currentUserRef.current as { userid?: string; id?: string })?.userid ??
+            (currentUserRef.current as { id?: string })?.id,
+          sessionid: sessionuidRef.current,
+          data,
+          timestamp: getTimeStamp()
+        })
+      )
+    })
+
+    return () => {
+      if (typeof unsubBuffer === 'function') unsubBuffer()
+    }
+  }, [])
+
   const closeApp = () => {
     const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
     if (overlay?.quitApp) {
@@ -831,61 +878,6 @@ export default function App() {
     }
   }
 
-  const getIconForPlatform = (platform: string) => {
-    if (platform === 'zoom') return ZoomIcon
-    if (platform === 'google-meet') return GMeetIcon
-    if (platform === 'teams') return TeamsIcon
-    return null
-  }
-
-  const renderMeetingStatus = () => {
-    if (activeMeetingId) {
-      const meeting = meetings.find((m) => m.id === activeMeetingId)
-      if (!meeting) return null
-      const icon = getIconForPlatform(meeting.platform)
-      const name = meeting.platform === 'google-meet'
-        ? 'Google Meet'
-        : (meeting.platform?.charAt(0).toUpperCase() ?? '') + (meeting.platform?.slice(1) ?? '')
-      return (
-        <div className="meeting-card no-drag">
-          <div className="meeting-card-close" onClick={() => setActiveMeetingId(null)}>
-            <X size={12} />
-          </div>
-          <div className="meeting-info">
-            <div className="meeting-icon">
-              {icon ? <img src={icon} alt={name} /> : null}
-            </div>
-            <div className="meeting-details">
-              <span className="meeting-label">Meeting Detected</span>
-              <span className="meeting-platform">{name}</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.id)} title="Copy ID">
-              <Copy size={16} />
-            </button>
-            <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.url)} title="Copy Link">
-              <Link2 size={16} />
-            </button>
-          </div>
-        </div>
-      )
-    }
-    if (meetings.length > 0) {
-      return (
-        <div className="meeting-list no-drag">
-          <span className="meeting-list-label">Meetings:</span>
-          {meetings.map((m) => (
-            <div key={m.id} className="meeting-list-item" onClick={() => setActiveMeetingId(m.id)} title={`Open ${m.platform}`}>
-              {getIconForPlatform(m.platform) ? <img src={getIconForPlatform(m.platform) ?? ''} alt={m.platform} /> : null}
-            </div>
-          ))}
-        </div>
-      )
-    }
-    return null
-  }
-
   const triggerSuggest = () => {
     if (isSuggesting) return
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
@@ -931,9 +923,63 @@ export default function App() {
           </div>
         </div>
 
-        <div className="status-section no-drag" style={{ padding: '0 12px' }}>
-          {renderMeetingStatus()}
-        </div>
+        {(() => {
+          if (activeMeetingId) {
+            const meeting = meetings.find((m) => m.id === activeMeetingId)
+            if (!meeting) return null
+            const icon = getMeetingPlatformIcon(meeting.platform)
+            const name = getMeetingPlatformLabel(meeting.platform)
+            return (
+              <div className="status-section no-drag" style={{ padding: '0 12px 8px' }}>
+                <div className="meeting-card no-drag">
+                  <div className="meeting-card-close" onClick={() => setActiveMeetingId(null)}>
+                    <X size={12} />
+                  </div>
+                  <div className="meeting-info">
+                    <div className="meeting-icon">
+                      {icon ? <img src={icon} alt={name} /> : null}
+                    </div>
+                    <div className="meeting-details">
+                      <span className="meeting-label">Meeting Detected</span>
+                      <span className="meeting-platform">{name}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.id)} title="Copy ID">
+                      <Copy size={16} />
+                    </button>
+                    <button type="button" className="btn-icon" onClick={() => copyToClipboard(meeting.url)} title="Copy Link">
+                      <Link2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+          if (meetings.length > 0) {
+            return (
+              <div className="status-section no-drag" style={{ padding: '0 12px 8px' }}>
+                <div className="meeting-list no-drag">
+                  <span className="meeting-list-label">Meetings:</span>
+                  {meetings.map((m) => {
+                    const icon = getMeetingPlatformIcon(m.platform)
+                    return (
+                      <div
+                        key={m.id}
+                        className="meeting-list-item"
+                        onClick={() => setActiveMeetingId(m.id)}
+                        title={`Open ${getMeetingPlatformLabel(m.platform)}`}
+                      >
+                        {icon ? <img src={icon} alt={m.platform} /> : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          }
+          return null
+        })()}
 
         <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -947,6 +993,8 @@ export default function App() {
             {isSuggesting ? 'Thinking...' : 'Suggest'}
           </button>
         </div>
+
+        <div className="status-section no-drag" />
 
         {selectedTab !== 'settings' && (
           <div className="controls-section no-drag">
