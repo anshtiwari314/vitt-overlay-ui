@@ -27,13 +27,15 @@ contextBridge.exposeInMainWorld('overlay', {
   },
   quitApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
-  openExternal: (url) => ipcRenderer.send('open-external', url)
+  openExternal: (url) => ipcRenderer.send('open-external', url),
+  resizeWindow: (payload) => ipcRenderer.send('resize-window', payload),
+  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen')
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
   ipcRenderer: {
     send: (channel, data) => {
-      const validChannels = ['message-from-renderer', 'api-key', 'log', 'close-app', 'minimize-app', 'open-external'];
+      const validChannels = ['message-from-renderer', 'api-key', 'log', 'close-app', 'minimize-app', 'open-external', 'resize-window', 'toggle-fullscreen'];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, data);
       }

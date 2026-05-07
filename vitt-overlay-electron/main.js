@@ -136,8 +136,8 @@ async function startRecording(windowId) {
 }
 
 function createWindow() {
-  const width = 420;
-  const height = 680;
+  const width = 280;
+  const height = 380;
 
   win = new BrowserWindow({
     width,
@@ -431,6 +431,52 @@ app.whenReady().then(() => {
 
   ipcMain.on('open-external', (_event, url) => {
     shell.openExternal(url);
+  });
+
+  // --- Window resize & emulated fullscreen ---
+  // The overlay window is created with frame:false, transparent:true and
+  // fullscreenable:false, so OS-level fullscreen is blocked. We emulate it by
+  // resizing the window to fill the display work area, and remember the prior
+  // bounds so toggling restores them.
+  let preFullscreenBounds = null;
+
+  ipcMain.on('resize-window', (_event, payload) => {
+    try {
+      if (!win) return;
+      const { widthPct, heightPct } = payload || {};
+      if (typeof widthPct !== 'number' || typeof heightPct !== 'number') return;
+      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+      const { x: ax, y: ay, width: aw, height: ah } = display.workArea;
+      const w = Math.round(aw * widthPct);
+      const h = Math.round(ah * heightPct);
+      const x = Math.round(ax + (aw - w) / 2);
+      const y = Math.round(ay + (ah - h) / 2);
+      win.setBounds({ x, y, width: w, height: h });
+      preFullscreenBounds = null;
+    } catch (e) {
+      console.error('ipcMain: resize-window error', e);
+    }
+  });
+
+  ipcMain.on('toggle-fullscreen', () => {
+    try {
+      if (!win) return;
+      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+      const wa = display.workArea;
+      const cur = win.getBounds();
+      const isFull =
+        preFullscreenBounds != null &&
+        cur.x === wa.x && cur.y === wa.y && cur.width === wa.width && cur.height === wa.height;
+      if (isFull) {
+        win.setBounds(preFullscreenBounds);
+        preFullscreenBounds = null;
+      } else {
+        preFullscreenBounds = cur;
+        win.setBounds({ x: wa.x, y: wa.y, width: wa.width, height: wa.height });
+      }
+    } catch (e) {
+      console.error('ipcMain: toggle-fullscreen error', e);
+    }
   });
 
   ipcMain.on('message-from-renderer', async (_event, arg) => {
