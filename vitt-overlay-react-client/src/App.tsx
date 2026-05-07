@@ -506,7 +506,7 @@ function ChatWithAITab({
 export default function App() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
   //const wsUrl = 'ws://localhost:5000/ws'
-  const wsUrl = 'wss://8e77-2401-4900-8828-9ca4-a8cc-c80d-372b-5fb3.ngrok-free.app/ws'
+  const wsUrl = 'wss://16b5-2401-4900-8828-9ca4-20b1-5cc2-2aad-9c01.ngrok-free.app/ws'
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
