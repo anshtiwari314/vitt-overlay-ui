@@ -176,6 +176,14 @@ function createWindow() {
   win.on('restore', () => {
     try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (_e) {}
   });
+  win.on('resize', () => {
+    try {
+      if (win && !win.isDestroyed()) {
+        const { width, height } = win.getBounds();
+        win.webContents.send('window-resized', { width, height });
+      }
+    } catch (_e) {}
+  });
   win.on('show', () => {
     try {
       if (!win.isMinimized()) win.setAlwaysOnTop(true, 'screen-saver');
@@ -443,12 +451,21 @@ app.whenReady().then(() => {
   ipcMain.on('resize-window', (_event, payload) => {
     try {
       if (!win) return;
-      const { widthPct, heightPct } = payload || {};
-      if (typeof widthPct !== 'number' || typeof heightPct !== 'number') return;
+      const { widthPct, heightPct, width, height } = payload || {};
       const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
       const { x: ax, y: ay, width: aw, height: ah } = display.workArea;
-      const w = Math.round(aw * widthPct);
-      const h = Math.round(ah * heightPct);
+
+      let w, h;
+      if (typeof width === 'number' && typeof height === 'number') {
+        w = width;
+        h = height;
+      } else if (typeof widthPct === 'number' && typeof heightPct === 'number') {
+        w = Math.round(aw * widthPct);
+        h = Math.round(ah * heightPct);
+      } else {
+        return;
+      }
+
       const x = Math.round(ax + (aw - w) / 2);
       const y = Math.round(ay + (ah - h) / 2);
       win.setBounds({ x, y, width: w, height: h });
@@ -477,6 +494,12 @@ app.whenReady().then(() => {
     } catch (e) {
       console.error('ipcMain: toggle-fullscreen error', e);
     }
+  });
+
+  ipcMain.handle('get-window-size', () => {
+    if (!win) return null;
+    const { width, height } = win.getBounds();
+    return { width, height };
   });
 
   ipcMain.on('message-from-renderer', async (_event, arg) => {

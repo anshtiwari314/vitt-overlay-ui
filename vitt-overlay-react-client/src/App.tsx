@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import './App.css'
-import './App5.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import { addPrompt } from './redux/reducers/promptsReducer'
 import { addConversationTurn, addIncomingMessages, addOutgoingMessage } from './redux/reducers/chatWithAIReducer'
@@ -27,7 +26,11 @@ import {
   SunMedium,
   SunMoon,
   UploadCloud,
-  X
+  X,
+  ChevronUp,
+  ChevronDown,
+  Maximize2,
+  Send
 } from 'lucide-react'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
@@ -62,6 +65,241 @@ const CHAT_RESPONSE_TIMEOUT_MS = 15000
 const AI_ASSIST_FALLBACK_PATTERNS = [
   /I did not catch enough speech to generate a support suggestion\.?/gi
 ]
+
+const SCROLL_LOCK_THRESHOLD = 80
+const HIGHLIGHT_DURATION_MS = 10000
+
+type ScrollLockApi = {
+  ref: React.RefObject<HTMLDivElement | null>
+  unseenCount: number
+  scrollToFollow: () => void
+  isHighlighted: (indexFromFollow: number) => boolean
+}
+
+function useScrollLock<T>(items: T[], mode: 'top' | 'bottom', threshold: number = SCROLL_LOCK_THRESHOLD): ScrollLockApi {
+  const ref = useRef<HTMLDivElement>(null)
+  const prevHeightRef = useRef(0)
+  const prevLengthRef = useRef(0)
+  const followRef = useRef(true)
+  const initRef = useRef(false)
+  const [unseenCount, setUnseenCount] = useState(0)
+  const [highlightCount, setHighlightCount] = useState(0)
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const isFollowing = useCallback(() => {
+    const el = ref.current
+    if (!el) return true
+    if (mode === 'top') return el.scrollTop <= threshold
+    return el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
+  }, [mode, threshold])
+
+  const markSeen = useCallback(() => {
+    setUnseenCount((prev) => {
+      if (prev > 0) {
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current)
+        setHighlightCount(prev)
+        highlightTimerRef.current = setTimeout(() => {
+          setHighlightCount(0)
+          highlightTimerRef.current = null
+        }, HIGHLIGHT_DURATION_MS)
+      }
+      return 0
+    })
+  }, [])
+
+  const scrollToFollow = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    if (mode === 'top') el.scrollTop = 0
+    else el.scrollTop = el.scrollHeight
+    followRef.current = true
+    markSeen()
+  }, [mode, markSeen])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onScroll = () => {
+      const following = isFollowing()
+      followRef.current = following
+      if (following) markSeen()
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [isFollowing, markSeen])
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (!initRef.current) {
+      if (mode === 'top') el.scrollTop = 0
+      else el.scrollTop = el.scrollHeight
+      prevHeightRef.current = el.scrollHeight
+      prevLengthRef.current = items.length
+      initRef.current = true
+      return
+    }
+    const lengthDelta = items.length - prevLengthRef.current
+    if (followRef.current) {
+      if (mode === 'top') el.scrollTop = 0
+      else el.scrollTop = el.scrollHeight
+    } else {
+      if (mode === 'top') {
+        const diff = el.scrollHeight - prevHeightRef.current
+        if (diff > 0) el.scrollTop += diff
+      }
+      if (lengthDelta > 0) {
+        setUnseenCount((prev) => prev + lengthDelta)
+      }
+    }
+    prevHeightRef.current = el.scrollHeight
+    prevLengthRef.current = items.length
+  }, [items, mode])
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current)
+  }, [])
+
+  const isHighlighted = useCallback((indexFromFollow: number) => {
+    return indexFromFollow < highlightCount
+  }, [highlightCount])
+
+  return { ref, unseenCount, scrollToFollow, isHighlighted }
+}
+
+type OverlayBridge = {
+  resizeWindow?: (p: { widthPct?: number; heightPct?: number; width?: number; height?: number }) => void
+  toggleFullscreen?: () => void
+  getWindowSize?: () => Promise<{ width: number; height: number } | null>
+  onWindowResized?: (cb: (size: { width: number; height: number }) => void) => () => void
+}
+
+const WINDOW_SIZE_PRESETS: { label: string; widthPct?: number; heightPct?: number; width?: number; height?: number }[] = [
+  { label: 'Default', width: 280, height: 380 },
+  { label: 'Compact', widthPct: 0.6, heightPct: 0.8 },
+  { label: 'Standard', widthPct: 0.7, heightPct: 0.8 },
+  { label: 'Large', widthPct: 0.85, heightPct: 0.9 }
+]
+
+function WindowResizeButton() {
+  const [open, setOpen] = useState(false)
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const overlay = (window as unknown as { overlay?: OverlayBridge }).overlay
+
+  useEffect(() => {
+    if (overlay?.getWindowSize) {
+      overlay.getWindowSize().then(s => setSize(s)).catch(() => {})
+    }
+    if (overlay?.onWindowResized) {
+      const unsubscribe = overlay.onWindowResized((newSize) => setSize(newSize))
+      return () => unsubscribe()
+    }
+  }, [overlay])
+
+  const cancelClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimerRef.current = setTimeout(() => setOpen(false), 150)
+  }
+
+  const onClick = () => {
+    overlay?.toggleFullscreen?.()
+    setOpen(false)
+  }
+
+  const applyPreset = (p: typeof WINDOW_SIZE_PRESETS[0]) => {
+    overlay?.resizeWindow?.({ widthPct: p.widthPct, heightPct: p.heightPct, width: p.width, height: p.height })
+    setOpen(false)
+  }
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
+
+  return (
+    <div
+      className="win-resize-wrap"
+      onMouseEnter={() => { cancelClose(); setOpen(true) }}
+      onMouseLeave={scheduleClose}
+    >
+      <button type="button" className="btn-icon" onClick={onClick} title="Resize / Fullscreen">
+        <Maximize2 size={18} />
+      </button>
+      {open && (
+        <div
+          className="win-resize-menu"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        >
+          {size && (
+            <>
+              <div className="win-resize-menu-item" style={{ cursor: 'default', background: 'transparent' }}>
+                <span>Current</span>
+                <span className="dim">{size.width} × {size.height}</span>
+              </div>
+              <div className="win-resize-menu-divider" />
+            </>
+          )}
+          {WINDOW_SIZE_PRESETS.map((p) => (
+            <button
+              type="button"
+              key={p.label}
+              className="win-resize-menu-item"
+              onClick={() => applyPreset(p)}
+            >
+              <span>{p.label}</span>
+              <span className="dim">
+                {p.width && p.height 
+                  ? `${p.width} × ${p.height}` 
+                  : `${Math.round((p.widthPct || 0) * 100)}% × ${Math.round((p.heightPct || 0) * 100)}%`}
+              </span>
+            </button>
+          ))}
+          <div className="win-resize-menu-divider" />
+          <button
+            type="button"
+            className="win-resize-menu-item"
+            onClick={() => { overlay?.toggleFullscreen?.(); setOpen(false) }}
+          >
+            <span>Fullscreen</span>
+            <span className="dim">toggle</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NewMessagesIndicator({
+  count,
+  mode,
+  onClick
+}: {
+  count: number
+  mode: 'top' | 'bottom'
+  onClick: () => void
+}) {
+  if (count <= 0) return null
+  const Icon = mode === 'top' ? ChevronUp : ChevronDown
+  return (
+    <button
+      type="button"
+      className={`new-messages-indicator new-messages-indicator-${mode}`}
+      onClick={onClick}
+    >
+      <Icon size={14} />
+      <span>{count} new {count === 1 ? 'message' : 'messages'}</span>
+    </button>
+  )
+}
 
 function escapeHtml(value: string) {
   return value
@@ -134,19 +372,23 @@ function formatAiAssistContent(raw: string) {
 
 function TranscriptionList() {
   const transcriptions = useSelector((state: { transcriptionReducer: { transcriptions: { speaker?: string; transcription: string }[] } }) => state.transcriptionReducer.transcriptions)
+  const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(transcriptions, 'top')
 
   return (
-    <div className="content-list">
-      {transcriptions.map((entry, index) => (
-        <TranscriptionItem e={entry} key={index} />
-      ))}
+    <div className="list-wrap">
+      <div className="content-list" ref={ref}>
+        {transcriptions.map((entry, index) => (
+          <TranscriptionItem e={entry} key={index} highlighted={isHighlighted(index)} />
+        ))}
+      </div>
+      <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
     </div>
   )
 }
 
-function TranscriptionItem({ e }: { e: { speaker?: string; transcription: string } }) {
+function TranscriptionItem({ e, highlighted }: { e: { speaker?: string; transcription: string }; highlighted?: boolean }) {
   return (
-    <div className="transcription-card">
+    <div className={`transcription-card${highlighted ? ' highlight-new' : ''}`}>
       {e.speaker && <div className="transcription-header">{e.speaker}</div>}
       <div className="transcription-text">{e.transcription}</div>
     </div>
@@ -155,23 +397,28 @@ function TranscriptionItem({ e }: { e: { speaker?: string; transcription: string
 
 function PromptList() {
   const prompts = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) => state.promptsReducer.prompts)
+  const list = prompts ?? []
+  const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(list, 'top')
 
   return (
-    <div className="content-list">
-      {prompts.length === 0 ? (
-        <div className="prompt-empty">
-          <div className="prompt-empty-title">No AI Assist results yet</div>
-          <div className="prompt-empty-text">Use the Suggest button above to trigger AI Assist.</div>
-        </div>
-      ) : null}
-      {prompts.map((entry, index) => (
-        <PromptItem e={entry} key={index} />
-      ))}
+    <div className="list-wrap">
+      <div className="content-list" ref={ref}>
+        {list.length === 0 ? (
+          <div className="prompt-empty">
+            <div className="prompt-empty-title">No AI Assist results yet</div>
+            <div className="prompt-empty-text">Use the Suggest button above to trigger AI Assist.</div>
+          </div>
+        ) : null}
+        {list.map((entry, index) => (
+          <PromptItem e={entry} key={index} highlighted={isHighlighted(index)} />
+        ))}
+      </div>
+      <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
     </div>
   )
 }
 
-function PromptItem({ e }: { e: { prompt: string } }) {
+function PromptItem({ e, highlighted }: { e: { prompt: string }; highlighted?: boolean }) {
   const formattedPrompt = formatAiAssistContent(e.prompt)
 
   if (!formattedPrompt) {
@@ -179,7 +426,7 @@ function PromptItem({ e }: { e: { prompt: string } }) {
   }
 
   return (
-    <div className="prompt-card">
+    <div className={`prompt-card${highlighted ? ' highlight-new' : ''}`}>
       <div className="prompt-card-header">
         <span className="prompt-card-badge">AI Assist</span>
       </div>
@@ -189,27 +436,34 @@ function PromptItem({ e }: { e: { prompt: string } }) {
 }
 
 function DataInfoList({ items }: { items: string[] }) {
+  const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(items, 'top')
+
   if (items.length === 0) {
     return (
-      <div className="content-list">
-        <div className="data-info-empty">
-          <div className="data-info-empty-title">No data yet</div>
-          <div className="data-info-empty-text">Latest backend data will appear here.</div>
+      <div className="list-wrap">
+        <div className="content-list" ref={ref}>
+          <div className="data-info-empty">
+            <div className="data-info-empty-title">No data yet</div>
+            <div className="data-info-empty-text">Latest backend data will appear here.</div>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="content-list">
-      {items.map((entry, index) => (
-        <DataInfoItem entry={entry} index={index} key={`${index}-${entry.slice(0, 24)}`} />
-      ))}
+    <div className="list-wrap">
+      <div className="content-list" ref={ref}>
+        {items.map((entry, index) => (
+          <DataInfoItem entry={entry} index={index} key={`${index}-${entry.slice(0, 24)}`} highlighted={isHighlighted(index)} />
+        ))}
+      </div>
+      <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
     </div>
   )
 }
 
-function DataInfoItem({ entry, index }: { entry: string; index: number }) {
+function DataInfoItem({ entry, index, highlighted }: { entry: string; index: number; highlighted?: boolean }) {
   const trimmedEntry = entry.trim()
   let formattedJson: string | null = null
 
@@ -225,7 +479,7 @@ function DataInfoItem({ entry, index }: { entry: string; index: number }) {
   }
 
   return (
-    <div className="data-info-card">
+    <div className={`data-info-card${highlighted ? ' highlight-new' : ''}`}>
       <div className="data-info-card-header">
         <span className="data-info-badge">Data</span>
         <span className="data-info-item-label">Item {index + 1}</span>
@@ -241,6 +495,8 @@ function DataInfoItem({ entry, index }: { entry: string; index: number }) {
 
 function UploadsTab({ sdkState }: { sdkState: { meetings: { id: string; title: string; status: string; uploadPercentage?: number }[] } }) {
   const [selectedMeeting, setSelectedMeeting] = useState<{ id: string } | null>(null)
+  const meetings = sdkState.meetings || []
+  const { ref: scrollRef, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(meetings, 'top')
 
   const StatusIcon = ({ status }: { status: string }) => {
     const props = { size: 20, strokeWidth: 2 }
@@ -260,30 +516,33 @@ function UploadsTab({ sdkState }: { sdkState: { meetings: { id: string; title: s
   }
 
   return (
-    <div className="content-list">
-      {(sdkState.meetings || []).map((meeting) => (
-        <div
-          key={meeting.id}
-          className="transcription-card"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            cursor: 'pointer',
-            borderColor: selectedMeeting?.id === meeting.id ? 'var(--accent)' : 'var(--border-glass)'
-          }}
-          onClick={() => setSelectedMeeting(meeting)}
-        >
-          <StatusIcon status={meeting.status} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{meeting.title}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{meeting.id}</div>
-            {meeting.uploadPercentage != null && (
-              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{meeting.uploadPercentage}% Uploaded</div>
-            )}
+    <div className="list-wrap">
+      <div className="content-list" ref={scrollRef}>
+        {meetings.map((meeting, i) => (
+          <div
+            key={meeting.id}
+            className={`transcription-card${isHighlighted(i) ? ' highlight-new' : ''}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              cursor: 'pointer',
+              borderColor: selectedMeeting?.id === meeting.id ? 'var(--accent)' : 'var(--border-glass)'
+            }}
+            onClick={() => setSelectedMeeting(meeting)}
+          >
+            <StatusIcon status={meeting.status} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{meeting.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{meeting.id}</div>
+              {meeting.uploadPercentage != null && (
+                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{meeting.uploadPercentage}% Uploaded</div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
     </div>
   )
 }
@@ -392,12 +651,15 @@ function ChatWithAITab({
   const messages = useSelector((state: { chatWithAIReducer: { messages: ChatMessage[] } }) => state.chatWithAIReducer.messages)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { ref: scrollRef, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(messages, 'bottom')
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const el = scrollRef.current
+    if (!el || !sending) return
+    const dist = el.scrollHeight - el.clientHeight - el.scrollTop
+    if (dist <= SCROLL_LOCK_THRESHOLD) el.scrollTop = el.scrollHeight
+  }, [sending, scrollRef])
 
   useEffect(() => {
     const onResponse = () => {
@@ -466,31 +728,35 @@ function ChatWithAITab({
 
   return (
     <div className="chat-tab">
-      <div className="chat-messages">
-        {messages.map((msg) =>
-          msg.role === 'user' ? (
-            <div key={msg.id} className="chat-message-out">
-              {msg.content}
+      <div className="chat-messages-wrap" style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="chat-messages" ref={scrollRef}>
+          {messages.map((msg, i) => {
+            const fromEnd = messages.length - 1 - i
+            const hl = isHighlighted(fromEnd) ? ' highlight-new' : ''
+            return msg.role === 'user' ? (
+              <div key={msg.id} className={`chat-message-out${hl}`}>
+                {msg.content}
+              </div>
+            ) : (
+              <div key={msg.id} className={`chat-message-in${hl}`}>
+                <div className="chat-html-content">{ReactHtmlParser(msg.content)}</div>
+              </div>
+            )
+          })}
+          {sending && (
+            <div className="chat-loading">
+              <Loader2 size={20} className="chat-loading-spinner" />
+              <span>Waiting for response...</span>
             </div>
-          ) : (
-            <div key={msg.id} className="chat-message-in">
-              <div className="chat-html-content">{ReactHtmlParser(msg.content)}</div>
-            </div>
-          )
-        )}
-        {sending && (
-          <div className="chat-loading">
-            <Loader2 size={20} className="chat-loading-spinner" />
-            <span>Waiting for response...</span>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          )}
+        </div>
+        <NewMessagesIndicator count={unseenCount} mode="bottom" onClick={scrollToFollow} />
       </div>
       <div className="chat-input-wrap">
         <div className="chat-textarea-wrap">
           <textarea
             className="chat-textarea"
-            placeholder="Type a message... (Enter to send)"
+            placeholder="Type a message... (Shift+Enter for new line)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -917,6 +1183,7 @@ export default function App() {
             <button type="button" className="btn-icon" onClick={minimizeApp} title="Minimize">
               <Minus size={18} />
             </button>
+            <WindowResizeButton />
             <button type="button" className="btn-icon danger" onClick={closeApp} title="Quit">
               <X size={18} />
             </button>

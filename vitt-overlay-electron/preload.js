@@ -29,7 +29,13 @@ contextBridge.exposeInMainWorld('overlay', {
   minimizeApp: () => ipcRenderer.send('minimize-app'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   resizeWindow: (payload) => ipcRenderer.send('resize-window', payload),
-  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen')
+  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
+  getWindowSize: () => ipcRenderer.invoke('get-window-size'),
+  onWindowResized: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('window-resized', subscription);
+    return () => ipcRenderer.removeListener('window-resized', subscription);
+  }
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

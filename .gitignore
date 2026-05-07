@@ -6,3 +6,4 @@ dist/*
 dist-mac/*
 build/
 *.txt
+.claude/
