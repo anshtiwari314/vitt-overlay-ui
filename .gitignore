@@ -6,4 +6,6 @@ dist/*
 dist-mac/*
 build/
 *.txt
-.claude/
+.claude
+vitt-overlay-electron/**/*.md
+vitt-overlay-react-client/**/*.md

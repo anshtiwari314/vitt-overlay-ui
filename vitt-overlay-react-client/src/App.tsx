@@ -40,6 +40,16 @@ import ZoomIcon from './assets/zoom.png'
 import TeamsIcon from './assets/teams.png'
 import type { ChatMessage } from './redux/reducers/chatWithAIReducer'
 
+export type DataInfoField = {
+  id: string
+  label: string
+  value?: string
+  is_editable?: boolean | string
+  is_copyable?: boolean | string
+  type?: 'text' | 'textarea' | 'option'
+  options?: string[]
+}
+
 function getMeetingPlatformIcon(platform?: string | null) {
   if (!platform) return null
   const key = platform.toLowerCase()
@@ -176,8 +186,9 @@ type OverlayBridge = {
 
 const WINDOW_SIZE_PRESETS: { label: string; widthPct?: number; heightPct?: number; width?: number; height?: number }[] = [
   { label: 'Default', width: 280, height: 380 },
-  { label: 'Compact', widthPct: 0.6, heightPct: 0.8 },
-  { label: 'Standard', widthPct: 0.7, heightPct: 0.8 },
+  { label: 'Expanded', width: 430, height: 765 },
+  { label: 'Compact', width: 560, height: 765 },
+  { label: 'Standard', width: 996, height: 787 },
   { label: 'Large', widthPct: 0.85, heightPct: 0.9 }
 ]
 
@@ -427,16 +438,25 @@ function PromptItem({ e, highlighted }: { e: { prompt: string }; highlighted?: b
 
   return (
     <div className={`prompt-card${highlighted ? ' highlight-new' : ''}`}>
-      <div className="prompt-card-header">
-        <span className="prompt-card-badge">AI Assist</span>
-      </div>
       <div className="transcription-text prompt-card-body">{parse(formattedPrompt)}</div>
     </div>
   )
 }
 
-function DataInfoList({ items }: { items: string[] }) {
-  const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(items, 'top')
+function DataInfoList({
+  items,
+  onChange,
+  onFocus,
+  onBlur,
+  onCopy
+}: {
+  items: DataInfoField[]
+  onChange: (id: string, newValue: string) => void
+  onFocus: (id: string) => void
+  onBlur: (id: string) => void
+  onCopy: (value: string) => void
+}) {
+  const { ref, unseenCount, scrollToFollow } = useScrollLock(items, 'top')
 
   if (items.length === 0) {
     return (
@@ -454,41 +474,92 @@ function DataInfoList({ items }: { items: string[] }) {
   return (
     <div className="list-wrap">
       <div className="content-list" ref={ref}>
-        {items.map((entry, index) => (
-          <DataInfoItem entry={entry} index={index} key={`${index}-${entry.slice(0, 24)}`} highlighted={isHighlighted(index)} />
-        ))}
+        <div className="data-info-card">
+          <div className="data-info-fields">
+            {items.map((item) => (
+              <DataInfoFieldItem
+                key={item.id}
+                item={item}
+                onChange={onChange}
+                onFocus={onFocus}
+                onBlur={onBlur}
+                onCopy={onCopy}
+              />
+            ))}
+          </div>
+        </div>
       </div>
       <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
     </div>
   )
 }
 
-function DataInfoItem({ entry, index, highlighted }: { entry: string; index: number; highlighted?: boolean }) {
-  const trimmedEntry = entry.trim()
-  let formattedJson: string | null = null
-
-  if (
-    (trimmedEntry.startsWith('{') && trimmedEntry.endsWith('}')) ||
-    (trimmedEntry.startsWith('[') && trimmedEntry.endsWith(']'))
-  ) {
-    try {
-      formattedJson = JSON.stringify(JSON.parse(trimmedEntry), null, 2)
-    } catch {
-      formattedJson = null
-    }
-  }
+function DataInfoFieldItem({
+  item,
+  onChange,
+  onFocus,
+  onBlur,
+  onCopy
+}: {
+  item: DataInfoField
+  onChange: (id: string, newValue: string) => void
+  onFocus: (id: string) => void
+  onBlur: (id: string) => void
+  onCopy: (value: string) => void
+}) {
+  const isEditable = item.is_editable === true || item.is_editable === 'true'
+  const isCopyable = item.is_copyable === true || item.is_copyable === 'true'
 
   return (
-    <div className={`data-info-card${highlighted ? ' highlight-new' : ''}`}>
-      <div className="data-info-card-header">
-        <span className="data-info-badge">Data</span>
-        <span className="data-info-item-label">Item {index + 1}</span>
+    <div className="data-info-field-row">
+      <label className="data-info-field-label">{item.label}</label>
+      <div className="data-info-field-control">
+        {item.type === 'option' ? (
+          <select
+            value={item.value ?? ''}
+            onChange={(e) => onChange(item.id, e.target.value)}
+            onFocus={() => onFocus(item.id)}
+            onBlur={() => onBlur(item.id)}
+            disabled={!isEditable}
+            className="data-info-select"
+          >
+            <option value="" disabled>Select...</option>
+            {item.options?.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        ) : item.type === 'textarea' ? (
+          <textarea
+            value={item.value ?? ''}
+            onChange={(e) => onChange(item.id, e.target.value)}
+            onFocus={() => onFocus(item.id)}
+            onBlur={() => onBlur(item.id)}
+            readOnly={!isEditable}
+            className="data-info-textarea"
+            rows={3}
+          />
+        ) : (
+          <input
+            type="text"
+            value={item.value ?? ''}
+            onChange={(e) => onChange(item.id, e.target.value)}
+            onFocus={() => onFocus(item.id)}
+            onBlur={() => onBlur(item.id)}
+            readOnly={!isEditable}
+            className="data-info-input"
+          />
+        )}
+        {isCopyable && (
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => onCopy(item.value ?? '')}
+            title="Copy"
+          >
+            <Copy size={14} />
+          </button>
+        )}
       </div>
-      {formattedJson ? (
-        <pre className="data-info-code">{formattedJson}</pre>
-      ) : (
-        <div className="transcription-text data-info-text">{parse(entry)}</div>
-      )}
     </div>
   )
 }
@@ -771,14 +842,14 @@ function ChatWithAITab({
 
 export default function App() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
-  //const wsUrl = 'ws://localhost:5000/ws'
-  const wsUrl = 'wss://16b5-2401-4900-8828-9ca4-20b1-5cc2-2aad-9c01.ngrok-free.app/ws'
+  const wsUrl = 'ws://localhost:5000/ws'
+  //const wsUrl = 'wss://16b5-2401-4900-8828-9ca4-20b1-5cc2-2aad-9c01.ngrok-free.app/ws'
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
   const [currentTime, setCurrentTime] = useState('')
   const [isServerConnected, setIsServerConnected] = useState(false)
-  const [dataInfoItems, setDataInfoItems] = useState<string[]>([])
+  const [dataInfoItems, setDataInfoItems] = useState<DataInfoField[]>([])
   const [sdkState, setSdkState] = useState({
     recording: false,
     permissions_granted: true,
@@ -789,6 +860,53 @@ export default function App() {
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
   const currentUserRef = useRef(currentUser)
   const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
+
+  const focusedFieldIdRef = useRef<string | null>(null)
+  const lastSentDataRef = useRef<string>('')
+  const pendingSendRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleDataInfoChange = useCallback((id: string, newValue: string) => {
+    setDataInfoItems((prev) => {
+      const updated = prev.map((item) =>
+        item.id === id ? { ...item, value: newValue } : item
+      )
+
+      if (pendingSendRef.current) {
+        clearTimeout(pendingSendRef.current)
+      }
+
+      pendingSendRef.current = setTimeout(() => {
+        const currentDataStr = JSON.stringify(updated)
+        if (currentDataStr !== lastSentDataRef.current) {
+          const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: 'data-info-update-req',
+                userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+                sessionid: sessionuidRef.current ?? '',
+                data_info: updated,
+                timestamp: getTimeStamp()
+              })
+            )
+            lastSentDataRef.current = currentDataStr
+          }
+        }
+      }, 3500)
+
+      return updated
+    })
+  }, [wsRef])
+
+  const handleDataInfoFocus = useCallback((id: string) => {
+    focusedFieldIdRef.current = id
+  }, [])
+
+  const handleDataInfoBlur = useCallback((id: string) => {
+    if (focusedFieldIdRef.current === id) {
+      focusedFieldIdRef.current = null
+    }
+  }, [])
   const assistantMsgCount = useSelector((state: { chatWithAIReducer: { messages: ChatMessage[] } }) =>
     state.chatWithAIReducer.messages.filter((m) => m.role === 'assistant').length
   )
@@ -969,24 +1087,28 @@ export default function App() {
           }
 
           const rawDataInfo = result.data_info ?? nestedData?.data_info
-          const nextDataInfoItems = Array.isArray(rawDataInfo)
-            ? rawDataInfo
-                .map((item) =>
-                  typeof item === 'string'
-                    ? item.trim()
-                    : typeof item === 'object' && item != null
-                      ? JSON.stringify(item, null, 2)
-                      : String(item ?? '').trim()
-                )
-                .filter(Boolean)
-            : typeof rawDataInfo === 'string'
-              ? (rawDataInfo.trim() ? [rawDataInfo.trim()] : [])
-              : typeof rawDataInfo === 'object' && rawDataInfo != null
-                ? [JSON.stringify(rawDataInfo, null, 2)]
-                : []
-
           if (rawDataInfo !== undefined) {
-            setDataInfoItems(nextDataInfoItems)
+            let nextDataInfoItems: DataInfoField[] = []
+            if (Array.isArray(rawDataInfo)) {
+              nextDataInfoItems = rawDataInfo as DataInfoField[]
+            } else if (typeof rawDataInfo === 'object' && rawDataInfo != null) {
+              nextDataInfoItems = [rawDataInfo as DataInfoField]
+            }
+
+            if (nextDataInfoItems.length > 0) {
+              setDataInfoItems((prev) => {
+                const focusedId = focusedFieldIdRef.current;
+                const merged = nextDataInfoItems.map((incomingItem) => {
+                  if (focusedId && incomingItem.id === focusedId) {
+                    const existing = prev.find(p => p.id === focusedId);
+                    return existing ? { ...incomingItem, value: existing.value } : incomingItem;
+                  }
+                  return incomingItem;
+                });
+                lastSentDataRef.current = JSON.stringify(merged);
+                return merged;
+              })
+            }
           }
 
           if (result.type === 'chat-with-ai-response' || result.event === 'chat-with-ai-response') {
@@ -1299,7 +1421,15 @@ export default function App() {
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
           {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} />}
           {selectedTab === 'prompts' && <PromptList />}
-          {selectedTab === 'data_info' && <DataInfoList items={dataInfoItems} />}
+          {selectedTab === 'data_info' && (
+            <DataInfoList
+              items={dataInfoItems}
+              onChange={handleDataInfoChange}
+              onFocus={handleDataInfoFocus}
+              onBlur={handleDataInfoBlur}
+              onCopy={copyToClipboard}
+            />
+          )}
           {selectedTab === 'settings' && (
             <SettingsTab
               transparency={transparency}
@@ -1324,7 +1454,7 @@ export default function App() {
         </div>
 
         <div className="bottom-hint no-drag">
-          Click-through: <b id="state">ON</b> • Alt + `
+          To Toggle use alt + shift + h
         </div>
       </div>
     </div>
