@@ -333,6 +333,31 @@
 .content-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
 .content-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 
+/* Transcript rows — same glass “bubble” treatment as incoming AI chat messages */
+.transcription-card {
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.transcription-header {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.transcription-text {
+  color: var(--text-main);
+}
+
 .prompt-trigger-btn {
   display: inline-flex;
   align-items: center;

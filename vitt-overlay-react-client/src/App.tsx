@@ -71,6 +71,50 @@ function getMeetingPlatformLabel(platform?: string | null) {
 /** Single shared WebSocket for the app so only one connection exists. */
 let appSharedWs: WebSocket | null = null
 
+const WS_URL_STORAGE_KEY = 'vitt-overlay-ws-url'
+const DEFAULT_WS_URL = 'wss://localhost:5173/ws'
+
+function normalizeWebSocketUrl(input: string): string {
+  let s = input.trim()
+  if (!s) return DEFAULT_WS_URL
+
+  if (/^https:\/\//i.test(s)) {
+    s = `wss://${s.slice(8)}`
+  } else if (/^http:\/\//i.test(s)) {
+    s = `ws://${s.slice(7)}`
+  } else if (!/^wss?:\/\//i.test(s)) {
+    s = `wss://${s.replace(/^\/+/, '')}`
+  }
+
+  try {
+    const u = new URL(s)
+    if (!u.pathname || u.pathname === '/') {
+      u.pathname = '/ws'
+    }
+    return u.toString()
+  } catch {
+    return /^wss?:\/\//i.test(s) ? s : DEFAULT_WS_URL
+  }
+}
+
+function readStoredWsUrl(): string {
+  try {
+    const raw = localStorage.getItem(WS_URL_STORAGE_KEY)
+    if (raw?.trim()) return normalizeWebSocketUrl(raw)
+  } catch {
+    /* private mode or blocked storage */
+  }
+  return DEFAULT_WS_URL
+}
+
+function persistWsUrl(url: string): void {
+  try {
+    localStorage.setItem(WS_URL_STORAGE_KEY, url)
+  } catch {
+    /* ignore */
+  }
+}
+
 const CHAT_RESPONSE_TIMEOUT_MS = 15000
 const AI_ASSIST_FALLBACK_PATTERNS = [
   /I did not catch enough speech to generate a support suggestion\.?/gi
@@ -623,15 +667,26 @@ function SettingsTab({
   setTransparency,
   currentUser,
   openExternal,
-  onLogout
+  onLogout,
+  activeWsUrl,
+  onSaveServerUrl
 }: {
   transparency: number
   setTransparency: (v: number) => void
   currentUser: { userid?: string; id?: string; name?: string; email?: string; role?: string } | null
   openExternal: (url: string) => void
   onLogout: () => void
+  activeWsUrl: string
+  onSaveServerUrl: (rawInput: string) => void
 }) {
   const [language, setLanguage] = useState('english')
+  const [serverUrlDraft, setServerUrlDraft] = useState(activeWsUrl)
+  const [serverUrlSaveMsg, setServerUrlSaveMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setServerUrlDraft(activeWsUrl)
+  }, [activeWsUrl])
+
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
   const displayEmail = currentUser?.email ?? 'N/A'
@@ -686,6 +741,42 @@ function SettingsTab({
             onChange={(e) => setTransparency(Number(e.target.value))}
             className="setting-slider"
           />
+        </div>
+      </div>
+
+      <div className="setting-section">
+        <div className="setting-header">Server</div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <span className="setting-label">WebSocket URL</span>
+          <input
+            type="text"
+            className="setting-input"
+            style={{ width: '100%', boxSizing: 'border-box' }}
+            value={serverUrlDraft}
+            onChange={(e) => setServerUrlDraft(e.target.value)}
+            placeholder="https://….ngrok-free.app or wss://host/ws"
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+          <span className="setting-label" style={{ fontSize: 10, lineHeight: 1.4, textTransform: 'none', fontWeight: 500 }}>
+            Paste an ngrok HTTPS link or a full ws:// or wss:// URL. Path defaults to /ws when omitted. Click Save to reconnect.
+          </span>
+          {serverUrlSaveMsg ? (
+            <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{serverUrlSaveMsg}</span>
+          ) : null}
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ flex: 'none', width: '100%', height: 40, marginTop: 4 }}
+            onClick={() => {
+              onSaveServerUrl(serverUrlDraft)
+              setServerUrlSaveMsg('Saved. Reconnecting to the new server…')
+              window.setTimeout(() => setServerUrlSaveMsg(null), 3200)
+            }}
+          >
+            Save server URL
+          </button>
         </div>
       </div>
 
@@ -842,8 +933,12 @@ function ChatWithAITab({
 
 export default function App() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
-  const wsUrl = 'ws://localhost:5000/ws'
-  //const wsUrl = 'wss://16b5-2401-4900-8828-9ca4-20b1-5cc2-2aad-9c01.ngrok-free.app/ws'
+  const [wsUrl, setWsUrl] = useState(() => readStoredWsUrl())
+  const handleSaveServerUrl = useCallback((rawInput: string) => {
+    const normalized = normalizeWebSocketUrl(rawInput)
+    persistWsUrl(normalized)
+    setWsUrl(normalized)
+  }, [])
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
@@ -1043,29 +1138,45 @@ export default function App() {
 
   useEffect(() => {
     const ref = wsRef as React.MutableRefObject<WebSocket | null>
-    if (appSharedWs && (appSharedWs.readyState === WebSocket.OPEN || appSharedWs.readyState === WebSocket.CONNECTING)) {
-      ref.current = appSharedWs
-      return () => {
-        ref.current = null
+    const reconnectInterval = 1000
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let disposed = false
+
+    const clearReconnect = () => {
+      if (reconnectTimer != null) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
       }
     }
 
-    if (ref.current != null) return () => { ref.current = null }
-
-    let tempWs: WebSocket
-    const reconnectInterval = 1000
-
-    function connect() {
-      if (appSharedWs && (appSharedWs.readyState === WebSocket.OPEN || appSharedWs.readyState === WebSocket.CONNECTING)) {
-        ref.current = appSharedWs
-        return
+    const teardownWs = () => {
+      clearReconnect()
+      const w = appSharedWs
+      if (w) {
+        w.onopen = null
+        w.onmessage = null
+        w.onclose = null
+        w.onerror = null
+        try {
+          w.close()
+        } catch {
+          /* ignore */
+        }
       }
+      appSharedWs = null
+      ref.current = null
+    }
 
-      tempWs = new WebSocket(wsUrl)
+    const connect = () => {
+      if (disposed) return
+      teardownWs()
+
+      const tempWs = new WebSocket(wsUrl)
       appSharedWs = tempWs
       ref.current = tempWs
 
       tempWs.onopen = () => {
+        if (disposed) return
         setIsServerConnected(true)
         tempWs.send('Hello from browser!')
       }
@@ -1164,7 +1275,8 @@ export default function App() {
         setIsServerConnected(false)
         appSharedWs = null
         ref.current = null
-        setTimeout(connect, reconnectInterval)
+        if (disposed) return
+        reconnectTimer = setTimeout(connect, reconnectInterval)
       }
 
       tempWs.onerror = () => {
@@ -1173,10 +1285,12 @@ export default function App() {
     }
 
     connect()
+
     return () => {
-      ref.current = null
+      disposed = true
+      teardownWs()
     }
-  }, [])
+  }, [wsUrl, wsRef])
 
   useEffect(() => {
     const overlay = (window as unknown as {
@@ -1437,6 +1551,8 @@ export default function App() {
               currentUser={currentUser}
               openExternal={openExternal}
               onLogout={handleLogout}
+              activeWsUrl={wsUrl}
+              onSaveServerUrl={handleSaveServerUrl}
             />
           )}
         </div>
