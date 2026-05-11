@@ -10,7 +10,6 @@ import {
   AlertCircle,
   BotMessageSquare,
   CheckCircle2,
-  Cloud,
   Copy,
   Database,
   FileText,
@@ -28,13 +27,17 @@ import {
   UploadCloud,
   X,
   ChevronUp,
-  ChevronDown,
-  Maximize2,
-  Send
+  ChevronDown
 } from 'lucide-react'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
+import {
+  normalizeWebSocketUrl,
+  persistWsUrl,
+  readStoredWsUrl
+} from './functions/serverUrl'
+import WindowResizeButton from './components/WindowResizeButton'
 import GMeetIcon from './assets/g-meet.png'
 import ZoomIcon from './assets/zoom.png'
 import TeamsIcon from './assets/teams.png'
@@ -70,50 +73,6 @@ function getMeetingPlatformLabel(platform?: string | null) {
 
 /** Single shared WebSocket for the app so only one connection exists. */
 let appSharedWs: WebSocket | null = null
-
-const WS_URL_STORAGE_KEY = 'vitt-overlay-ws-url'
-const DEFAULT_WS_URL = 'wss://localhost:5173/ws'
-
-function normalizeWebSocketUrl(input: string): string {
-  let s = input.trim()
-  if (!s) return DEFAULT_WS_URL
-
-  if (/^https:\/\//i.test(s)) {
-    s = `wss://${s.slice(8)}`
-  } else if (/^http:\/\//i.test(s)) {
-    s = `ws://${s.slice(7)}`
-  } else if (!/^wss?:\/\//i.test(s)) {
-    s = `wss://${s.replace(/^\/+/, '')}`
-  }
-
-  try {
-    const u = new URL(s)
-    if (!u.pathname || u.pathname === '/') {
-      u.pathname = '/ws'
-    }
-    return u.toString()
-  } catch {
-    return /^wss?:\/\//i.test(s) ? s : DEFAULT_WS_URL
-  }
-}
-
-function readStoredWsUrl(): string {
-  try {
-    const raw = localStorage.getItem(WS_URL_STORAGE_KEY)
-    if (raw?.trim()) return normalizeWebSocketUrl(raw)
-  } catch {
-    /* private mode or blocked storage */
-  }
-  return DEFAULT_WS_URL
-}
-
-function persistWsUrl(url: string): void {
-  try {
-    localStorage.setItem(WS_URL_STORAGE_KEY, url)
-  } catch {
-    /* ignore */
-  }
-}
 
 const CHAT_RESPONSE_TIMEOUT_MS = 15000
 const AI_ASSIST_FALLBACK_PATTERNS = [
@@ -219,118 +178,6 @@ function useScrollLock<T>(items: T[], mode: 'top' | 'bottom', threshold: number 
   }, [highlightCount])
 
   return { ref, unseenCount, scrollToFollow, isHighlighted }
-}
-
-type OverlayBridge = {
-  resizeWindow?: (p: { widthPct?: number; heightPct?: number; width?: number; height?: number }) => void
-  toggleFullscreen?: () => void
-  getWindowSize?: () => Promise<{ width: number; height: number } | null>
-  onWindowResized?: (cb: (size: { width: number; height: number }) => void) => () => void
-}
-
-const WINDOW_SIZE_PRESETS: { label: string; widthPct?: number; heightPct?: number; width?: number; height?: number }[] = [
-  { label: 'Default', width: 280, height: 380 },
-  { label: 'Expanded', width: 430, height: 765 },
-  { label: 'Compact', width: 560, height: 765 },
-  { label: 'Standard', width: 996, height: 787 },
-  { label: 'Large', widthPct: 0.85, heightPct: 0.9 }
-]
-
-function WindowResizeButton() {
-  const [open, setOpen] = useState(false)
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null)
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const overlay = (window as unknown as { overlay?: OverlayBridge }).overlay
-
-  useEffect(() => {
-    if (overlay?.getWindowSize) {
-      overlay.getWindowSize().then(s => setSize(s)).catch(() => {})
-    }
-    if (overlay?.onWindowResized) {
-      const unsubscribe = overlay.onWindowResized((newSize) => setSize(newSize))
-      return () => unsubscribe()
-    }
-  }, [overlay])
-
-  const cancelClose = () => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
-    }
-  }
-
-  const scheduleClose = () => {
-    cancelClose()
-    closeTimerRef.current = setTimeout(() => setOpen(false), 150)
-  }
-
-  const onClick = () => {
-    overlay?.toggleFullscreen?.()
-    setOpen(false)
-  }
-
-  const applyPreset = (p: typeof WINDOW_SIZE_PRESETS[0]) => {
-    overlay?.resizeWindow?.({ widthPct: p.widthPct, heightPct: p.heightPct, width: p.width, height: p.height })
-    setOpen(false)
-  }
-
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
-
-  return (
-    <div
-      className="win-resize-wrap"
-      onMouseEnter={() => { cancelClose(); setOpen(true) }}
-      onMouseLeave={scheduleClose}
-    >
-      <button type="button" className="btn-icon" onClick={onClick} title="Resize / Fullscreen">
-        <Maximize2 size={18} />
-      </button>
-      {open && (
-        <div
-          className="win-resize-menu"
-          onMouseEnter={cancelClose}
-          onMouseLeave={scheduleClose}
-        >
-          {size && (
-            <>
-              <div className="win-resize-menu-item" style={{ cursor: 'default', background: 'transparent' }}>
-                <span>Current</span>
-                <span className="dim">{size.width} × {size.height}</span>
-              </div>
-              <div className="win-resize-menu-divider" />
-            </>
-          )}
-          {WINDOW_SIZE_PRESETS.map((p) => (
-            <button
-              type="button"
-              key={p.label}
-              className="win-resize-menu-item"
-              onClick={() => applyPreset(p)}
-            >
-              <span>{p.label}</span>
-              <span className="dim">
-                {p.width && p.height 
-                  ? `${p.width} × ${p.height}` 
-                  : `${Math.round((p.widthPct || 0) * 100)}% × ${Math.round((p.heightPct || 0) * 100)}%`}
-              </span>
-            </button>
-          ))}
-          <div className="win-resize-menu-divider" />
-          <button
-            type="button"
-            className="win-resize-menu-item"
-            onClick={() => { overlay?.toggleFullscreen?.(); setOpen(false) }}
-          >
-            <span>Fullscreen</span>
-            <span className="dim">toggle</span>
-          </button>
-        </div>
-      )}
-    </div>
-  )
 }
 
 function NewMessagesIndicator({

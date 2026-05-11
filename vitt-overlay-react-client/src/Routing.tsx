@@ -4,13 +4,13 @@ import GlobalRoute from './components/GlobalRoute'
 import PrivateRoute from './components/PrivateRoute'
 import { DataWrapper } from './context/DataWrapper'
 import { VadWrapper } from './context/VadWrapper'
-import Login2 from './pages/Login2'
+import Login3 from './pages/Login3'
 
 export default function Routing() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<GlobalRoute component={<Login2 />} />} />
+        <Route path="/" element={<GlobalRoute component={<Login3 />} />} />
         <Route
           path="/app"
           element={

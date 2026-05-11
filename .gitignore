@@ -9,3 +9,4 @@ build/
 .claude
 vitt-overlay-electron/**/*.md
 vitt-overlay-react-client/**/*.md
+*.zip
