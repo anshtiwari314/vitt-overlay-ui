@@ -379,6 +379,31 @@ function sanitizeAiAssistText(raw: string) {
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
+function normalizeSocketEventName(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().toLowerCase().replace(/[_\s]+/g, '-')
+}
+
+function isChatWithAiResponseEvent(
+  result: Record<string, unknown>,
+  nestedData: Record<string, unknown> | null
+) {
+  const eventCandidates = [
+    result.type,
+    result.event,
+    nestedData?.type,
+    nestedData?.event
+  ]
+
+  return eventCandidates.some((candidate) => {
+    const normalized = normalizeSocketEventName(candidate)
+    return normalized === 'chat-with-ai-response' || normalized === 'chat-with-ai-response-event'
+  })
+}
+
 function formatAiAssistContent(raw: string) {
   const sanitized = sanitizeAiAssistText(raw)
 
@@ -1222,7 +1247,7 @@ export default function App() {
             }
           }
 
-          if (result.type === 'chat-with-ai-response' || result.event === 'chat-with-ai-response') {
+          if (isChatWithAiResponseEvent(result, nestedData)) {
             const transcript = (result.transcript ?? nestedData?.transcript) as string | undefined
             const aiPrompt = (result.ai_prompt ?? nestedData?.ai_prompt ?? result.support_reply ?? nestedData?.support_reply) as string | undefined
             const aiChat = (result.ai_chat ?? nestedData?.ai_chat ?? result.support_reply ?? nestedData?.support_reply) as string | undefined
