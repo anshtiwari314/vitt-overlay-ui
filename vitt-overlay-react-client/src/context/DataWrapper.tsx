@@ -1,5 +1,6 @@
 import React, { createContext, useContext } from 'react'
 import { useAuth } from './AuthContext'
+import { DEFAULT_HTTP_BASE_URL } from '../functions/serverUrl'
 
 type DataUser = {
   userid?: string
@@ -35,7 +36,7 @@ export function useData() {
 export function DataWrapper({ children }: { children: React.ReactNode }) {
   const [ws, setWs] = React.useState<WebSocket | null>(null)
   const wsRef = React.useRef<WebSocket | null>(null)
-  const authServerUrl = 'http://localhost:5000'
+  const authServerUrl = DEFAULT_HTTP_BASE_URL
   const { setCurrentUser, setaccess_token } = useAuth()
 
   const values = {

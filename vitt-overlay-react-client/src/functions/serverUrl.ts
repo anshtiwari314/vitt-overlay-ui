@@ -6,7 +6,24 @@
  */
 
 export const WS_URL_STORAGE_KEY = 'vitt-overlay-ws-url'
-export const DEFAULT_WS_URL = 'wss://localhost:5173/ws'
+
+const FALLBACK_HTTP_BASE_URL = 'http://localhost:5000'
+
+function httpBaseToWsUrl(httpBase: string): string {
+  try {
+    const u = new URL(httpBase)
+    const proto = u.protocol === 'https:' ? 'wss:' : 'ws:'
+    const path = u.pathname && u.pathname !== '/' ? u.pathname : '/ws'
+    return `${proto}//${u.host}${path}`
+  } catch {
+    return 'ws://localhost:5000/ws'
+  }
+}
+
+export const DEFAULT_HTTP_BASE_URL =
+  (import.meta.env.VITE_SERVER_BASE_URL?.trim()) || FALLBACK_HTTP_BASE_URL
+
+export const DEFAULT_WS_URL = httpBaseToWsUrl(DEFAULT_HTTP_BASE_URL)
 
 /**
  * Coerce arbitrary user input into a valid ws:// or wss:// URL with a
