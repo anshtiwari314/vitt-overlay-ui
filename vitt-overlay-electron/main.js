@@ -23,7 +23,20 @@ for (const envPath of envCandidates) {
 }
 
 import { app, BrowserWindow, ipcMain, shell, dialog, Notification, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
+import contextMenu from 'electron-context-menu';
 import RecallAiSdk from '@recallai/desktop-sdk';
+
+// Right-click context menu (cut/copy/paste/select-all) for any editable
+// field in any renderer. Without this, macOS users cannot right-click→Paste
+// into inputs such as the WebSocket URL field on the login screen.
+contextMenu({
+  showCopyImage: false,
+  showSearchWithGoogle: false,
+  showInspectElement: !app.isPackaged,
+  showLearnSpelling: false,
+  showLookUpSelection: false,
+  showServices: false
+});
 
 let win;
 let tray;
