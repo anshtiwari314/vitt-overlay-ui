@@ -675,10 +675,12 @@ function SettingsTab({
 
 function ChatWithAITab({
   userid,
-  sessionid
+  sessionid,
+  source
 }: {
   userid: string
   sessionid: string
+  source?: string
 }) {
   const dispatch = useDispatch()
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -732,6 +734,7 @@ function ChatWithAITab({
       ws.send(
         JSON.stringify({
           type: 'chat-with-ai',
+          source,
           userid,
           sessionid,
           query,
@@ -823,7 +826,7 @@ export default function App() {
     meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
   })
 
-  const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string } | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
+  const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string;source?:string} | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
   const currentUserRef = useRef(currentUser)
   const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
@@ -850,6 +853,7 @@ export default function App() {
             ws.send(
               JSON.stringify({
                 type: 'data-info-update-req',
+                source: currentUserRef.current?.source ?? '',
                 userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
                 sessionid: sessionuidRef.current ?? '',
                 data_info: updated,
@@ -1176,6 +1180,7 @@ export default function App() {
       ws.send(
         JSON.stringify({
           type: 'recall-buffer',
+          source: (currentUserRef.current as { source?: string })?.source ?? '',
           userid:
             (currentUserRef.current as { userid?: string; id?: string })?.userid ??
             (currentUserRef.current as { id?: string })?.id,
@@ -1235,6 +1240,7 @@ export default function App() {
 
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const sessionid = (currentUser as { sessionuid?: string })?.sessionuid ?? (sessionuidRef.current ?? '')
+  const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
 
   const handleLogout = () => {
     setCurrentUser(null)
@@ -1262,7 +1268,11 @@ export default function App() {
       suggestTimeoutRef.current = null
       setIsSuggesting(false)
     }, CHAT_RESPONSE_TIMEOUT_MS)
-    ws.send(JSON.stringify({ type: 'suggest_me_next', userid, sessionid, query: '', timestamp: getTimeStamp(), prompt_trigger: true }))
+    ws.send(JSON.stringify({
+      type:'generate-filler',
+      source,
+      userid, sessionid,
+    }))
   }
 
   return (
@@ -1405,7 +1415,7 @@ export default function App() {
         <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           {selectedTab === 'transcript' && <TranscriptionList />}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
-          {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} />}
+          {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} source={source} />}
           {selectedTab === 'prompts' && <PromptList />}
           {selectedTab === 'data_info' && (
             <DataInfoList

@@ -26,6 +26,7 @@ type LoginResponse = {
   name?: string
   email?: string
   meetingId?: string
+  source?:string
 }
 
 type ConnState = 'idle' | 'connecting' | 'connected' | 'failed'
@@ -177,7 +178,8 @@ export default function Login3() {
         email: data.email || email.trim(),
         role: 'User',
         clientId: data.clientId || '',
-        meetingId: data.meetingId || ''
+        meetingId: data.meetingId || '',
+        source:data?.source || '',
       }
 
       setCurrentUser(normalizedUser)
