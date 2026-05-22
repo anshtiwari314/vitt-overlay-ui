@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { v4 as uuidv4 } from 'uuid'
 import './App.css'
 import { addTranscription } from './redux/reducers/TranscriptionReducer'
 import { addPrompt } from './redux/reducers/promptsReducer'
@@ -829,7 +830,10 @@ export default function App() {
   const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string;source?:string} | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
   const currentUserRef = useRef(currentUser)
-  const sessionuidRef = useRef((currentUser as { sessionuid?: string })?.sessionuid)
+  const fallbackSessionIdRef = useRef(uuidv4())
+  const meetingSessionIdsRef = useRef<Record<string, string>>({})
+  const sessionuidRef = useRef(fallbackSessionIdRef.current)
+  const [activeSessionId, setActiveSessionId] = useState(fallbackSessionIdRef.current)
 
   const focusedFieldIdRef = useRef<string | null>(null)
   const lastSentDataRef = useRef<string>('')
@@ -895,6 +899,20 @@ export default function App() {
   const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string; title?: string }[]>([])
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
   const [copyToast, setCopyToast] = useState(false)
+  const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
+  const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
+  const socketUrl = (() => {
+    try {
+      const url = new URL(wsUrl)
+      if (source) url.searchParams.set('source', source)
+      if (userid) url.searchParams.set('userid', userid)
+      if (activeSessionId) url.searchParams.set('sessionid', activeSessionId)
+      if (activeMeetingId) url.searchParams.set('roomId', activeMeetingId)
+      return url.toString()
+    } catch {
+      return wsUrl
+    }
+  })()
 
   useEffect(() => {
     console.log(
@@ -908,8 +926,24 @@ export default function App() {
 
   useEffect(() => {
     currentUserRef.current = currentUser
-    sessionuidRef.current = (currentUser as { sessionuid?: string })?.sessionuid
   }, [currentUser])
+
+  useEffect(() => {
+    const effectiveMeetingId = activeMeetingId ?? meetings[0]?.id ?? null
+
+    if (!effectiveMeetingId) {
+      sessionuidRef.current = fallbackSessionIdRef.current
+      setActiveSessionId(fallbackSessionIdRef.current)
+      return
+    }
+
+    const existingMeetingSessionId = meetingSessionIdsRef.current[effectiveMeetingId]
+    const nextMeetingSessionId = existingMeetingSessionId ?? uuidv4()
+
+    meetingSessionIdsRef.current[effectiveMeetingId] = nextMeetingSessionId
+    sessionuidRef.current = nextMeetingSessionId
+    setActiveSessionId(nextMeetingSessionId)
+  }, [activeMeetingId, meetings])
 
   useEffect(() => {
     selectedTabRef.current = selectedTab
@@ -987,10 +1021,12 @@ export default function App() {
       const e = evt as { window?: { id?: string } }
       const closedId = e?.window?.id
       if (!closedId) {
+        meetingSessionIdsRef.current = {}
         setMeetings([])
         setActiveMeetingId(null)
         return
       }
+      delete meetingSessionIdsRef.current[closedId]
       setMeetings((prev) => prev.filter((m) => m.id !== closedId))
       setActiveMeetingId((prev) => (prev === closedId ? null : prev))
     })
@@ -1047,7 +1083,7 @@ export default function App() {
       if (disposed) return
       teardownWs()
 
-      const tempWs = new WebSocket(wsUrl)
+      const tempWs = new WebSocket(socketUrl)
       appSharedWs = tempWs
       ref.current = tempWs
 
@@ -1061,6 +1097,7 @@ export default function App() {
             source: currentUserRef.current?.source ?? '',
             userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
             sessionid: sessionuidRef.current ?? '',
+            roomId: activeMeetingId ?? '',
             timestamp: getTimeStamp()
           })
         )
@@ -1175,7 +1212,7 @@ export default function App() {
       disposed = true
       teardownWs()
     }
-  }, [wsUrl, wsRef])
+  }, [activeMeetingId, socketUrl, wsRef])
 
   useEffect(() => {
     const overlay = (window as unknown as {
@@ -1247,9 +1284,7 @@ export default function App() {
     setUnreadTabs((prev) => { const s = new Set(prev); s.delete(tab); return s })
   }
 
-  const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
-  const sessionid = (currentUser as { sessionuid?: string })?.sessionuid ?? (sessionuidRef.current ?? '')
-  const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
+  const sessionid = activeSessionId
 
   const handleLogout = () => {
     setCurrentUser(null)
