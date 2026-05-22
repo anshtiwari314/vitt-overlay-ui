@@ -57,7 +57,7 @@ function readStoredUser() {
     const parsed = JSON.parse(stored) as AuthUser
     return {
       ...parsed,
-      sessionuid: parsed.sessionuid || parsed.meetingId || uuidv4()
+      sessionuid: parsed.sessionuid || uuidv4()
     }
   } catch {
     window.localStorage.removeItem(AUTH_STORAGE_KEY)
@@ -97,7 +97,7 @@ export default function AuthContext({ children }: { children: React.ReactNode })
         if (nextValue) {
           const normalizedUser = {
             ...nextValue,
-            sessionuid: nextValue.sessionuid || nextValue.meetingId || uuidv4()
+            sessionuid: nextValue.sessionuid || uuidv4()
           }
           window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalizedUser))
           setIsAuthenticated(true)

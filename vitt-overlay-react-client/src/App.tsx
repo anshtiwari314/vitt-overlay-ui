@@ -1054,7 +1054,16 @@ export default function App() {
       tempWs.onopen = () => {
         if (disposed) return
         setIsServerConnected(true)
-        tempWs.send('Hello from browser!')
+        tempWs.send(
+          JSON.stringify({
+            type: 'client-init',
+            message: 'Hello from browser!',
+            source: currentUserRef.current?.source ?? '',
+            userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+            sessionid: sessionuidRef.current ?? '',
+            timestamp: getTimeStamp()
+          })
+        )
       }
 
       tempWs.onmessage = (event: MessageEvent) => {

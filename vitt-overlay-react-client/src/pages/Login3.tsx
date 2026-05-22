@@ -170,10 +170,12 @@ export default function Login3() {
         throw new Error(data.message || 'Login failed')
       }
 
+      const sessionuid = uuidv4()
+
       const normalizedUser = {
         userid: data.clientId || email.trim(),
         id: data.clientId || email.trim(),
-        sessionuid: data.meetingId || uuidv4(),
+        sessionuid,
         name: data.name || email.trim().split('@')[0],
         email: data.email || email.trim(),
         role: 'User',
