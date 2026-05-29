@@ -317,11 +317,15 @@ let transcriptionSlice = createSlice({
             state.transcriptions = [tempObj,...state.transcriptions]
             console.log('after modifying state',current(state))
             return state;
+        },
+        clearTranscriptions:(state)=>{
+            state.transcriptions = []
+            return state
         }
     }
 })
 
-export const {addTranscription } = transcriptionSlice.actions;
+export const {addTranscription, clearTranscriptions } = transcriptionSlice.actions;
 
 export default transcriptionSlice.reducer
 

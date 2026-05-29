@@ -28,10 +28,14 @@ let promptsSlice = createSlice({
             state.prompts = [tempObj,...state.prompts]
             console.log('after modifying state',current(state))
             return state;
+        },
+        clearPrompts:(state)=>{
+            state.prompts = []
+            return state
         }
     }
 })
 
-export const {addPrompt } = promptsSlice.actions;
+export const {addPrompt, clearPrompts } = promptsSlice.actions;
 
 export default promptsSlice.reducer

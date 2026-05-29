@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from
 import { useDispatch, useSelector } from 'react-redux'
 import { v4 as uuidv4 } from 'uuid'
 import './App.css'
-import { addTranscription } from './redux/reducers/TranscriptionReducer'
-import { addPrompt } from './redux/reducers/promptsReducer'
-import { addConversationTurn, addIncomingMessages, addOutgoingMessage } from './redux/reducers/chatWithAIReducer'
+import { addTranscription, clearTranscriptions } from './redux/reducers/TranscriptionReducer'
+import { addPrompt, clearPrompts } from './redux/reducers/promptsReducer'
+import { addConversationTurn, addIncomingMessages, addOutgoingMessage, clearChat } from './redux/reducers/chatWithAIReducer'
 import parse from 'html-react-parser'
 import ReactHtmlParser from 'html-react-parser'
 import {
@@ -1286,7 +1286,70 @@ export default function App() {
 
   const sessionid = activeSessionId
 
+  const resetSessionState = useCallback(() => {
+    dispatch(clearTranscriptions())
+    dispatch(clearPrompts())
+    dispatch(clearChat())
+
+    if (pendingSendRef.current) {
+      clearTimeout(pendingSendRef.current)
+      pendingSendRef.current = null
+    }
+
+    if (suggestTimeoutRef.current) {
+      clearTimeout(suggestTimeoutRef.current)
+      suggestTimeoutRef.current = null
+    }
+
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws) {
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onclose = null
+      ws.onerror = null
+      try {
+        ws.close()
+      } catch {
+        /* ignore */
+      }
+      wsRef.current = null
+    }
+
+    const nextFallbackSessionId = uuidv4()
+    fallbackSessionIdRef.current = nextFallbackSessionId
+    meetingSessionIdsRef.current = {}
+    sessionuidRef.current = nextFallbackSessionId
+    currentUserRef.current = null
+    focusedFieldIdRef.current = null
+    lastSentDataRef.current = ''
+    selectedTabRef.current = 'transcript'
+    prevAssistantMsgCount.current = 0
+    prevPromptsCount.current = 0
+    prevDataLen.current = 0
+
+    setActiveSessionId(nextFallbackSessionId)
+    setSelectedTab('transcript')
+    setUnreadTabs(new Set())
+    setIsSuggesting(false)
+    setCopyToast(false)
+    setDataInfoItems([])
+    setIsServerConnected(false)
+    setMeetings([])
+    setActiveMeetingId(null)
+    setSdkState({
+      recording: false,
+      permissions_granted: true,
+      meetings: []
+    })
+  }, [dispatch, wsRef])
+
+  useEffect(() => {
+    if (!currentUser?.sessionuid) return
+    resetSessionState()
+  }, [currentUser?.sessionuid, resetSessionState])
+
   const handleLogout = () => {
+    resetSessionState()
     setCurrentUser(null)
     setaccess_token('')
   }
