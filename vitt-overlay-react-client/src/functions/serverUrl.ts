@@ -1,13 +1,16 @@
 /**
  * Shared helpers for the server URL used by both the login flow and the
- * WebSocket connection inside the overlay. A single source of truth ensures
- * whatever URL the user enters at login is the same one App.tsx connects to
- * after authentication.
+ * WebSocket connection inside the overlay. Defaults come from `.env`
+ * (`VITE_SERVER_BASE_URL`); nothing is persisted to localStorage.
  */
 
-export const WS_URL_STORAGE_KEY = 'vitt-overlay-ws-url'
-
 const FALLBACK_HTTP_BASE_URL = 'http://localhost:5000'
+
+const LEGACY_STORAGE_KEYS = [
+  'vitt-overlay-ws-url',
+  'vitt-overlay-auth-user',
+  'vitt-overlay-access-token'
+] as const
 
 function httpBaseToWsUrl(httpBase: string): string {
   try {
@@ -24,6 +27,15 @@ export const DEFAULT_HTTP_BASE_URL =
   (import.meta.env.VITE_SERVER_BASE_URL?.trim()) || FALLBACK_HTTP_BASE_URL
 
 export const DEFAULT_WS_URL = httpBaseToWsUrl(DEFAULT_HTTP_BASE_URL)
+
+/** Remove legacy localStorage keys from older builds. */
+export function clearLegacyStoredPreferences(): void {
+  try {
+    LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+  } catch {
+    /* private mode or blocked storage */
+  }
+}
 
 /**
  * Coerce arbitrary user input into a valid ws:// or wss:// URL with a
@@ -49,24 +61,6 @@ export function normalizeWebSocketUrl(input: string): string {
     return u.toString()
   } catch {
     return /^wss?:\/\//i.test(s) ? s : DEFAULT_WS_URL
-  }
-}
-
-export function readStoredWsUrl(): string {
-  try {
-    const raw = localStorage.getItem(WS_URL_STORAGE_KEY)
-    if (raw?.trim()) return normalizeWebSocketUrl(raw)
-  } catch {
-    /* private mode or blocked storage */
-  }
-  return DEFAULT_WS_URL
-}
-
-export function persistWsUrl(url: string): void {
-  try {
-    localStorage.setItem(WS_URL_STORAGE_KEY, url)
-  } catch {
-    /* ignore */
   }
 }
 

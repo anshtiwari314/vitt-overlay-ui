@@ -22,8 +22,6 @@ type AuthContextValue = {
   loading: boolean
 }
 
-const AUTH_STORAGE_KEY = 'vitt-overlay-auth-user'
-const TOKEN_STORAGE_KEY = 'vitt-overlay-access-token'
 const LOGIN_BYPASS_ENABLED = import.meta.env.VITE_BYPASS_LOGIN === 'true'
 
 const Auth = createContext<AuthContextValue | null>(null)
@@ -43,34 +41,12 @@ function getBypassUser() {
   }
 }
 
-function readStoredUser() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  const stored = window.localStorage.getItem(AUTH_STORAGE_KEY)
-  if (!stored) {
-    return getBypassUser()
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as AuthUser
-    return {
-      ...parsed,
-      sessionuid: parsed.sessionuid || uuidv4()
-    }
-  } catch {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
-    return getBypassUser()
-  }
+function getInitialUser() {
+  return getBypassUser()
 }
 
-function readStoredToken() {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY) || ''
+function getInitialToken() {
+  return LOGIN_BYPASS_ENABLED ? 'dev-bypass-token' : ''
 }
 
 export function useAuth() {
@@ -83,9 +59,9 @@ export function useAuth() {
 }
 
 export default function AuthContext({ children }: { children: React.ReactNode }) {
-  const initialUser = readStoredUser()
+  const initialUser = getInitialUser()
   const [currentUser, setCurrentUserState] = useState<AuthUser | null>(initialUser)
-  const [access_token, setAccessTokenState] = useState(() => readStoredToken() || (LOGIN_BYPASS_ENABLED ? 'dev-bypass-token' : ''))
+  const [access_token, setAccessTokenState] = useState(getInitialToken)
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(initialUser))
   const [loading] = useState(false)
 
@@ -93,18 +69,13 @@ export default function AuthContext({ children }: { children: React.ReactNode })
     setCurrentUserState((previous) => {
       const nextValue = typeof value === 'function' ? value(previous) : value
 
-      if (typeof window !== 'undefined') {
-        if (nextValue) {
-          const normalizedUser = {
-            ...nextValue,
-            sessionuid: nextValue.sessionuid || uuidv4()
-          }
-          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalizedUser))
-          setIsAuthenticated(true)
-          return normalizedUser
+      if (nextValue) {
+        const normalizedUser = {
+          ...nextValue,
+          sessionuid: nextValue.sessionuid || uuidv4()
         }
-
-        window.localStorage.removeItem(AUTH_STORAGE_KEY)
+        setIsAuthenticated(true)
+        return normalizedUser
       }
 
       setIsAuthenticated(false)
@@ -113,26 +84,11 @@ export default function AuthContext({ children }: { children: React.ReactNode })
   }
 
   const setaccess_token: React.Dispatch<React.SetStateAction<string>> = (value) => {
-    setAccessTokenState((previous) => {
-      const nextValue = typeof value === 'function' ? value(previous) : value
-
-      if (typeof window !== 'undefined') {
-        if (nextValue) {
-          window.localStorage.setItem(TOKEN_STORAGE_KEY, nextValue)
-        } else {
-          window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-        }
-      }
-
-      return nextValue
-    })
+    setAccessTokenState((previous) => (typeof value === 'function' ? value(previous) : value))
   }
 
   useEffect(() => {
     if (!currentUser) {
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-      }
       setAccessTokenState('')
       setIsAuthenticated(false)
       return

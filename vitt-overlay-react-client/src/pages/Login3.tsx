@@ -10,11 +10,10 @@ import {
   X
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useServerUrl } from '../context/ServerUrlContext'
 import WindowResizeButton from '../components/WindowResizeButton'
 import {
   normalizeWebSocketUrl,
-  persistWsUrl,
-  readStoredWsUrl,
   wsUrlToHttpOrigin
 } from '../functions/serverUrl'
 import '../App.css'
@@ -36,8 +35,7 @@ const CONNECTION_PROBE_TIMEOUT_MS = 5000
 export default function Login3() {
   const navigate = useNavigate()
   const { setCurrentUser, setaccess_token } = useAuth()
-
-  const [serverUrl, setServerUrl] = useState(() => readStoredWsUrl())
+  const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -49,7 +47,7 @@ export default function Login3() {
   const probeRef = useRef<WebSocket | null>(null)
   const probeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const normalizedUrl = useMemo(() => normalizeWebSocketUrl(serverUrl), [serverUrl])
+  const normalizedUrl = useMemo(() => normalizeWebSocketUrl(wsUrlDraft), [wsUrlDraft])
 
   const closeProbe = () => {
     if (probeTimeoutRef.current) {
@@ -131,9 +129,7 @@ export default function Login3() {
   }, [normalizedUrl])
 
   const handleSaveServerUrl = () => {
-    const normalized = normalizeWebSocketUrl(serverUrl)
-    persistWsUrl(normalized)
-    setServerUrl(normalized)
+    commitWsUrlDraft()
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -146,9 +142,8 @@ export default function Login3() {
     setError('')
     setIsSubmitting(true)
 
-    const finalWsUrl = normalizeWebSocketUrl(serverUrl)
-    persistWsUrl(finalWsUrl)
-    setServerUrl(finalWsUrl)
+    commitWsUrlDraft()
+    const finalWsUrl = normalizeWebSocketUrl(wsUrlDraft)
 
     const origin = wsUrlToHttpOrigin(finalWsUrl)
     if (!origin) {
@@ -277,8 +272,8 @@ export default function Login3() {
                   type="text"
                   className="setting-input"
                   style={{ width: '100%', boxSizing: 'border-box' }}
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
+                  value={wsUrlDraft}
+                  onChange={(e) => updateWsUrlDraft(e.target.value)}
                   onBlur={handleSaveServerUrl}
                   placeholder="https://….ngrok-free.app or wss://host/ws"
                   spellCheck={false}
@@ -297,7 +292,7 @@ export default function Login3() {
                 <button
                   type="button"
                   className="login3-retry"
-                  onClick={() => probeConnection(normalizeWebSocketUrl(serverUrl))}
+                  onClick={() => probeConnection(normalizeWebSocketUrl(wsUrlDraft))}
                   disabled={connState === 'connecting'}
                   title="Test connection again"
                 >

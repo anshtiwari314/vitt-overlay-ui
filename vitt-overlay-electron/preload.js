@@ -47,13 +47,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     },
     on: (channel, func) => {
-      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'meeting-detected', 'meeting-closed', 'current-window-id', 'recall-buffer'];
+      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'detected-meetings', 'current-window-id', 'recall-buffer'];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => func(...args));
       }
     },
     removeAllListeners: (channel) => {
-      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'meeting-detected', 'meeting-closed', 'current-window-id', 'recall-buffer'];
+      const validChannels = ['message-from-main', 'state', 'api-key', 'log', 'detected-meetings', 'current-window-id', 'recall-buffer'];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }

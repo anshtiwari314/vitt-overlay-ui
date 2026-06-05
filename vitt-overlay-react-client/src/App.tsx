@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useLayoutEffect, useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { v4 as uuidv4 } from 'uuid'
 import './App.css'
@@ -33,11 +33,7 @@ import {
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
-import {
-  normalizeWebSocketUrl,
-  persistWsUrl,
-  readStoredWsUrl
-} from './functions/serverUrl'
+import { useServerUrl } from './context/ServerUrlContext'
 import WindowResizeButton from './components/WindowResizeButton'
 import GMeetIcon from './assets/g-meet.png'
 import ZoomIcon from './assets/zoom.png'
@@ -540,25 +536,17 @@ function SettingsTab({
   setTransparency,
   currentUser,
   openExternal,
-  onLogout,
-  activeWsUrl,
-  onSaveServerUrl
+  onLogout
 }: {
   transparency: number
   setTransparency: (v: number) => void
   currentUser: { userid?: string; id?: string; name?: string; email?: string; role?: string } | null
   openExternal: (url: string) => void
   onLogout: () => void
-  activeWsUrl: string
-  onSaveServerUrl: (rawInput: string) => void
 }) {
+  const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
   const [language, setLanguage] = useState('english')
-  const [serverUrlDraft, setServerUrlDraft] = useState(activeWsUrl)
   const [serverUrlSaveMsg, setServerUrlSaveMsg] = useState<string | null>(null)
-
-  useEffect(() => {
-    setServerUrlDraft(activeWsUrl)
-  }, [activeWsUrl])
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
@@ -625,8 +613,8 @@ function SettingsTab({
             type="text"
             className="setting-input"
             style={{ width: '100%', boxSizing: 'border-box' }}
-            value={serverUrlDraft}
-            onChange={(e) => setServerUrlDraft(e.target.value)}
+            value={wsUrlDraft}
+            onChange={(e) => updateWsUrlDraft(e.target.value)}
             placeholder="https://….ngrok-free.app or wss://host/ws"
             spellCheck={false}
             autoCapitalize="off"
@@ -643,7 +631,7 @@ function SettingsTab({
             className="btn-primary"
             style={{ flex: 'none', width: '100%', height: 40, marginTop: 4 }}
             onClick={() => {
-              onSaveServerUrl(serverUrlDraft)
+              commitWsUrlDraft()
               setServerUrlSaveMsg('Saved. Reconnecting to the new server…')
               window.setTimeout(() => setServerUrlSaveMsg(null), 3200)
             }}
@@ -809,12 +797,7 @@ function ChatWithAITab({
 
 export default function App() {
   const recallElectronAPI = (window as unknown as { electronAPI?: { ipcRenderer: { on: (c: string, h: (s: unknown) => void) => void; send: (c: string, p: unknown) => void; removeAllListeners: (c: string) => void } } }).electronAPI?.ipcRenderer
-  const [wsUrl, setWsUrl] = useState(() => readStoredWsUrl())
-  const handleSaveServerUrl = useCallback((rawInput: string) => {
-    const normalized = normalizeWebSocketUrl(rawInput)
-    persistWsUrl(normalized)
-    setWsUrl(normalized)
-  }, [])
+  const { wsUrl } = useServerUrl()
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
@@ -898,21 +881,37 @@ export default function App() {
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string; title?: string }[]>([])
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
+  const prevMeetingsCountRef = useRef(0)
   const [copyToast, setCopyToast] = useState(false)
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
-  const socketUrl = (() => {
+  const recordingMeetingId = activeMeetingId ?? meetings[0]?.id ?? null
+  const connectionSessionId =
+    currentUser?.sessionuid ?? fallbackSessionIdRef.current
+  const activeMeetingIdRef = useRef(activeMeetingId)
+  const meetingsRef = useRef(meetings)
+
+  useEffect(() => {
+    activeMeetingIdRef.current = activeMeetingId
+  }, [activeMeetingId])
+
+  useEffect(() => {
+    meetingsRef.current = meetings
+  }, [meetings])
+
+  const socketUrl = useMemo(() => {
     try {
       const url = new URL(wsUrl)
       if (source) url.searchParams.set('source', source)
       if (userid) url.searchParams.set('userid', userid)
-      if (activeSessionId) url.searchParams.set('sessionid', activeSessionId)
-      if (activeMeetingId) url.searchParams.set('roomId', activeMeetingId)
+      if (connectionSessionId) url.searchParams.set('sessionid', connectionSessionId)
       return url.toString()
     } catch {
       return wsUrl
     }
-  })()
+  }, [wsUrl, source, userid, connectionSessionId])
+
+  const effectiveRoomId = activeMeetingId ?? meetings[0]?.id ?? ''
 
   useEffect(() => {
     console.log(
@@ -1006,43 +1005,50 @@ export default function App() {
   useEffect(() => {
     if (!recallElectronAPI) return
     recallElectronAPI.on('state', (newState: unknown) => setSdkState(newState as typeof sdkState))
-    recallElectronAPI.on('meeting-detected', (evt: unknown) => {
-      const e = evt as { window?: { id: string; platform: string; url?: string; title?: string } }
-      const newMeeting = e?.window
-      if (!newMeeting) return
-      setMeetings((prev) => {
-        if (prev.find((m) => m.id === newMeeting.id)) return prev
-        const updated = [...prev, newMeeting]
-        if (updated.length === 1) setActiveMeetingId(newMeeting.id)
-        return updated
+    recallElectronAPI.on('detected-meetings', (payload: unknown) => {
+      const data = payload as { meetings?: { id: string; platform: string; url?: string; title?: string }[] }
+      const nextMeetings = data?.meetings ?? []
+      const nextIds = new Set(nextMeetings.map((m) => m.id))
+      Object.keys(meetingSessionIdsRef.current).forEach((id) => {
+        if (!nextIds.has(id)) delete meetingSessionIdsRef.current[id]
       })
-    })
-    recallElectronAPI.on('meeting-closed', (evt: unknown) => {
-      const e = evt as { window?: { id?: string } }
-      const closedId = e?.window?.id
-      if (!closedId) {
-        meetingSessionIdsRef.current = {}
-        setMeetings([])
-        setActiveMeetingId(null)
-        return
-      }
-      delete meetingSessionIdsRef.current[closedId]
-      setMeetings((prev) => prev.filter((m) => m.id !== closedId))
-      setActiveMeetingId((prev) => (prev === closedId ? null : prev))
+      setMeetings(nextMeetings)
     })
     recallElectronAPI.send('message-from-renderer', { command: 'renderer-ready' })
     return () => {
       recallElectronAPI.removeAllListeners('state')
-      recallElectronAPI.removeAllListeners('meeting-detected')
-      recallElectronAPI.removeAllListeners('meeting-closed')
+      recallElectronAPI.removeAllListeners('detected-meetings')
     }
   }, [])
 
   useEffect(() => {
-    if (meetings.length === 0) return
-    const currentActiveExists = activeMeetingId != null && meetings.some((m) => m.id === activeMeetingId)
-    if (!currentActiveExists) setActiveMeetingId(meetings[0].id)
-  }, [meetings, activeMeetingId])
+    const prevCount = prevMeetingsCountRef.current
+    const nextCount = meetings.length
+
+    if (nextCount === 0) {
+      setActiveMeetingId(null)
+    } else if (nextCount === 1) {
+      if (prevCount === 0 || prevCount > 1) {
+        setActiveMeetingId(meetings[0].id)
+      }
+    } else if (nextCount > 1) {
+      if (nextCount > prevCount) {
+        setActiveMeetingId(null)
+      } else {
+        setActiveMeetingId((prev) =>
+          prev != null && meetings.some((m) => m.id === prev) ? prev : null
+        )
+      }
+    }
+
+    prevMeetingsCountRef.current = nextCount
+  }, [meetings])
+
+  useEffect(() => {
+    if (activeMeetingId && !meetings.some((m) => m.id === activeMeetingId)) {
+      setActiveMeetingId(null)
+    }
+  }, [activeMeetingId, meetings])
 
   const dispatch = useDispatch()
   const dispatchRef = useRef(dispatch)
@@ -1090,14 +1096,17 @@ export default function App() {
       tempWs.onopen = () => {
         if (disposed) return
         setIsServerConnected(true)
+        const roomId =
+          activeMeetingIdRef.current ?? meetingsRef.current[0]?.id ?? ''
         tempWs.send(
           JSON.stringify({
             type: 'client-init',
             message: 'Hello from browser!',
             source: currentUserRef.current?.source ?? '',
             userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
-            sessionid: sessionuidRef.current ?? '',
-            roomId: activeMeetingId ?? '',
+            sessionid:
+              currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
+            roomId,
             timestamp: getTimeStamp()
           })
         )
@@ -1212,7 +1221,23 @@ export default function App() {
       disposed = true
       teardownWs()
     }
-  }, [activeMeetingId, socketUrl, wsRef])
+  }, [socketUrl, wsRef])
+
+  useEffect(() => {
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws?.readyState !== WebSocket.OPEN) return
+
+    ws.send(
+      JSON.stringify({
+        type: 'room-update',
+        source: currentUserRef.current?.source ?? '',
+        userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+        sessionid: sessionuidRef.current ?? '',
+        roomId: effectiveRoomId,
+        timestamp: getTimeStamp()
+      })
+    )
+  }, [effectiveRoomId, wsRef])
 
   useEffect(() => {
     const overlay = (window as unknown as {
@@ -1301,7 +1326,7 @@ export default function App() {
       suggestTimeoutRef.current = null
     }
 
-    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
     if (ws) {
       ws.onopen = null
       ws.onmessage = null
@@ -1312,6 +1337,7 @@ export default function App() {
       } catch {
         /* ignore */
       }
+      appSharedWs = null
       wsRef.current = null
     }
 
@@ -1345,8 +1371,10 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser?.sessionuid) return
-    resetSessionState()
-  }, [currentUser?.sessionuid, resetSessionState])
+    sessionuidRef.current = currentUser.sessionuid
+    fallbackSessionIdRef.current = currentUser.sessionuid
+    setActiveSessionId(currentUser.sessionuid)
+  }, [currentUser?.sessionuid])
 
   const handleLogout = () => {
     resetSessionState()
@@ -1452,7 +1480,7 @@ export default function App() {
             return (
               <div className="status-section no-drag" style={{ padding: '0 12px 8px' }}>
                 <div className="meeting-list no-drag">
-                  <span className="meeting-list-label">Meetings:</span>
+                  {meetings.length > 1 ? <span className="meeting-list-label">Meetings:</span> : null}
                   {meetings.map((m) => {
                     const icon = getMeetingPlatformIcon(m.platform)
                     return (
@@ -1496,7 +1524,12 @@ export default function App() {
                   type="button"
                   className={`btn-primary ${sdkState.recording ? 'recording' : ''}`}
                   disabled={sdkState.recording}
-                  onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'start-recording' })}
+                  onClick={() =>
+                    recallElectronAPI?.send('message-from-renderer', {
+                      command: 'start-recording',
+                      id: recordingMeetingId
+                    })
+                  }
                 >
                   <Mic size={18} />
                   {sdkState.recording ? 'Recording...' : 'Start Recording'}
@@ -1505,7 +1538,12 @@ export default function App() {
                   type="button"
                   className="btn-primary"
                   disabled={!sdkState.recording}
-                  onClick={() => recallElectronAPI?.send('message-from-renderer', { command: 'stop-recording' })}
+                  onClick={() =>
+                    recallElectronAPI?.send('message-from-renderer', {
+                      command: 'stop-recording',
+                      id: recordingMeetingId
+                    })
+                  }
                 >
                   <Pause size={18} />
                   Pause
@@ -1540,8 +1578,6 @@ export default function App() {
               currentUser={currentUser}
               openExternal={openExternal}
               onLogout={handleLogout}
-              activeWsUrl={wsUrl}
-              onSaveServerUrl={handleSaveServerUrl}
             />
           )}
         </div>

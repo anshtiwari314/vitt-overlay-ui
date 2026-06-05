@@ -42,12 +42,35 @@ let win;
 let tray;
 let isClickThrough = true;
 
-let detectedMeeting = null;
+/** Active detected meetings. Source of truth for renderer UI. */
+let detectedMeetings = [];
+
+function meetingFromEvent(evt) {
+  const meetingWindow = evt?.window;
+  if (!meetingWindow?.id) return null;
+  return {
+    id: meetingWindow.id,
+    platform: meetingWindow.platform ?? null,
+    url: meetingWindow.url ?? null,
+    title: meetingWindow.title ?? null,
+  };
+}
+
 let state = {
   recording: false,
   permissions_granted: true,
   meetings: [],
 };
+
+function sendDetectedMeetingsState() {
+  try {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('detected-meetings', { meetings: detectedMeetings });
+    }
+  } catch (e) {
+    console.error('Failed to send detected meetings to renderer:', e);
+  }
+}
 
 function sendState() {
   try {
@@ -413,21 +436,24 @@ app.whenReady().then(() => {
 
   RecallAiSdk.addEventListener('meeting-closed', async (evt) => {
     console.log('MEETING CLOSED', evt);
-    detectedMeeting = null;
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('meeting-closed', evt);
+    const closedId = evt?.window?.id;
+    if (closedId) {
+      detectedMeetings = detectedMeetings.filter((m) => m.id !== closedId);
+    } else {
+      detectedMeetings = [];
     }
+    sendDetectedMeetingsState();
   });
 
   RecallAiSdk.addEventListener('meeting-detected', async (evt) => {
     console.log('MEETING DETECTED', evt);
-    detectedMeeting = evt;
+    const meeting = meetingFromEvent(evt);
+    if (!meeting) return;
 
-    setTimeout(() => {
-      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
-        win.webContents.send('meeting-detected', evt);
-      }
-    }, 500);
+    if (!detectedMeetings.some((m) => m.id === meeting.id)) {
+      detectedMeetings.push(meeting);
+    }
+    sendDetectedMeetingsState();
 
     const notif = new Notification({
       title: 'Meeting detected',
@@ -439,11 +465,11 @@ app.whenReady().then(() => {
     });
 
     notif.on('action', async (_action, index) => {
-      if (index === 0) await startRecording(evt.window.id);
+      if (index === 0) await startRecording(meeting.id);
     });
 
     notif.on('click', async () => {
-      await startRecording(evt.window.id);
+      await startRecording(meeting.id);
     });
 
     notif.show();
@@ -564,22 +590,27 @@ app.whenReady().then(() => {
       case 'renderer-ready':
         console.log('Renderer is ready, sending initial state');
         sendState();
+        sendDetectedMeetingsState();
         break;
       case 'reupload':
         RecallAiSdk.uploadRecording({ windowId: arg.id });
         break;
-      case 'start-recording':
-        if (!detectedMeeting) {
+      case 'start-recording': {
+        const windowId = arg.id ?? detectedMeetings[0]?.id;
+        if (!windowId) {
           dialog.showMessageBoxSync(null, { message: 'There is no meeting in progress.' });
           break;
         }
-        await startRecording(detectedMeeting.window.id);
+        await startRecording(windowId);
         break;
-      case 'stop-recording':
-        if (detectedMeeting) {
-          RecallAiSdk.stopRecording({ windowId: detectedMeeting.window.id });
+      }
+      case 'stop-recording': {
+        const windowId = arg.id ?? detectedMeetings[0]?.id;
+        if (windowId) {
+          RecallAiSdk.stopRecording({ windowId });
         }
         break;
+      }
     }
   });
 });
