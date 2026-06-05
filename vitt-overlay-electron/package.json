@@ -41,7 +41,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "baseline-browser-mapping": "^2.9.13",
     "electron": "^38.1.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -53,10 +53,22 @@
   "build": {
     "appId": "com.VittAi.overlay",
     "productName": "Overlay-Vitt",
-    "files": ["dist", "main.js", "preload.js", "build", ".env"],
+    "files": [
+      "dist",
+      "main.js",
+      "preload.js",
+      "build",
+      ".env"
+    ],
     "extraResources": [
-      { "from": ".env", "to": ".env" },
-      { "from": "../vitt-overlay-react-client/dist", "to": "client-dist" }
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": "../vitt-overlay-react-client/dist",
+        "to": "client-dist"
+      }
     ],
     "win": {
       "target": "portable",
@@ -64,11 +76,14 @@
     },
     "mac": {
       "target": [
-    {
-      "target": "dmg",
-      "arch": ["arm64", "x64"]
-    }
-  ],
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "category": "public.app-category.utilities",
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
@@ -76,10 +91,10 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "extendInfo": {
-    "NSMicrophoneUsageDescription": "Vitt Overlay needs microphone access to detect voice activity.",
-    "NSAccessibilityUsageDescription": "Vitt Overlay requires Accessibility permissions to use global keyboard shortcuts (Option + ~).",
-    "NSScreenCaptureDescription": "Vitt Overlay needs screen recording permissions to function properly over your display."
-  }
+        "NSMicrophoneUsageDescription": "Vitt Overlay needs microphone access to detect voice activity.",
+        "NSAccessibilityUsageDescription": "Vitt Overlay requires Accessibility permissions to use global keyboard shortcuts (Option + ~).",
+        "NSScreenCaptureDescription": "Vitt Overlay needs screen recording permissions to function properly over your display."
+      }
     },
     "directories": {
       "output": "dist-mac"
