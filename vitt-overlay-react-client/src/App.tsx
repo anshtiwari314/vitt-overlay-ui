@@ -550,7 +550,6 @@ function SettingsTab({
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
-  const displayEmail = currentUser?.email ?? 'N/A'
   const displayRole = currentUser?.role ?? 'N/A'
 
   return (
@@ -560,10 +559,6 @@ function SettingsTab({
         <div className="setting-row">
           <span className="setting-label">Name</span>
           <span className="setting-value">{displayName}</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Email</span>
-          <span className="setting-value">{displayEmail}</span>
         </div>
         <div className="setting-row">
           <span className="setting-label">User ID</span>
@@ -1096,17 +1091,17 @@ export default function App() {
       tempWs.onopen = () => {
         if (disposed) return
         setIsServerConnected(true)
-        const roomId =
-          activeMeetingIdRef.current ?? meetingsRef.current[0]?.id ?? ''
+        const initUserid =
+          currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
         tempWs.send(
           JSON.stringify({
             type: 'client-init',
             message: 'Hello from browser!',
             source: currentUserRef.current?.source ?? '',
-            userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+            userid: initUserid,
             sessionid:
               currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
-            roomId,
+            roomId: initUserid,
             timestamp: getTimeStamp()
           })
         )
@@ -1233,7 +1228,7 @@ export default function App() {
         source: currentUserRef.current?.source ?? '',
         userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
         sessionid: sessionuidRef.current ?? '',
-        roomId: effectiveRoomId,
+        roomid: effectiveRoomId,
         timestamp: getTimeStamp()
       })
     )

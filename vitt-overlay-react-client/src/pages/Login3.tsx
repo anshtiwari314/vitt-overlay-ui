@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import {
   ArrowRight,
+  Eye,
+  EyeOff,
   Minus,
   Server,
   Sparkles,
@@ -36,8 +38,9 @@ export default function Login3() {
   const navigate = useNavigate()
   const { setCurrentUser, setaccess_token } = useAuth()
   const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
-  const [email, setEmail] = useState('')
+  const [userid, setUserid] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [transparency] = useState(85)
@@ -134,8 +137,8 @@ export default function Login3() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!email.trim() || !password) {
-      setError('Please enter both email and password.')
+    if (!userid.trim() || !password) {
+      setError('Please enter both user id and password.')
       return
     }
 
@@ -156,7 +159,7 @@ export default function Login3() {
       const response = await fetch(`${origin}/login-post`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password })
+        body: JSON.stringify({ email: userid.trim(), password })
       })
 
       const data = (await response.json()) as LoginResponse
@@ -168,11 +171,11 @@ export default function Login3() {
       const sessionuid = uuidv4()
 
       const normalizedUser = {
-        userid: data.clientId || email.trim(),
-        id: data.clientId || email.trim(),
+        userid: userid.trim(),
+        id: data.clientId || userid.trim(),
         sessionuid,
-        name: data.name || email.trim().split('@')[0],
-        email: data.email || email.trim(),
+        name: data.name || userid.trim(),
+        email: data.email || '',
         role: 'User',
         clientId: data.clientId || '',
         meetingId: data.meetingId || '',
@@ -310,20 +313,20 @@ export default function Login3() {
           <form onSubmit={handleSubmit} className="login3-form">
             <label className="login3-float-field">
               <input
-                type="email"
+                type="text"
                 className="login3-float-input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={userid}
+                onChange={(e) => setUserid(e.target.value)}
                 placeholder=" "
                 autoComplete="username"
                 required
               />
-              <span className="login3-float-label">Email Address</span>
+              <span className="login3-float-label">User id</span>
             </label>
 
-            <label className="login3-float-field">
+            <label className="login3-float-field login3-float-field--password">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 className="login3-float-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -331,6 +334,15 @@ export default function Login3() {
                 autoComplete="current-password"
                 required
               />
+              <button
+                type="button"
+                className="login3-password-toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
               <span className="login3-float-label">Password</span>
             </label>
 

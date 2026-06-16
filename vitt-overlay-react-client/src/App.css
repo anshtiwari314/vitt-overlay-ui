@@ -1320,3 +1320,26 @@
   letter-spacing: 0.04em;
   font-weight: 600;
 }
+
+.login3-float-field--password .login3-float-input {
+  padding-right: 28px;
+}
+
+.login3-password-toggle {
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.login3-password-toggle:hover {
+  color: var(--text-main);
+}

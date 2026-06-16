@@ -1,13 +1,14 @@
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios';
 import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const portableExeDir = process.env.PORTABLE_EXECUTABLE_DIR;
 const envCandidates = [
+  ...(portableExeDir ? [path.join(portableExeDir, '.env')] : []),
   path.join(process.cwd(), '.env'),
   path.join(__dirname, '.env'),
   path.join(process.resourcesPath, '.env'),
@@ -22,9 +23,8 @@ for (const envPath of envCandidates) {
   }
 }
 
-import { app, BrowserWindow, ipcMain, shell, dialog, Notification, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
 import contextMenu from 'electron-context-menu';
-import RecallAiSdk from '@recallai/desktop-sdk';
 
 // Right-click context menu (cut/copy/paste/select-all) for any editable
 // field in any renderer. Without this, macOS users cannot right-click→Paste
@@ -44,17 +44,6 @@ let isClickThrough = true;
 
 /** Active detected meetings. Source of truth for renderer UI. */
 let detectedMeetings = [];
-
-function meetingFromEvent(evt) {
-  const meetingWindow = evt?.window;
-  if (!meetingWindow?.id) return null;
-  return {
-    id: meetingWindow.id,
-    platform: meetingWindow.platform ?? null,
-    url: meetingWindow.url ?? null,
-    title: meetingWindow.title ?? null,
-  };
-}
 
 let state = {
   recording: false,
@@ -79,95 +68,6 @@ function sendState() {
     }
   } catch (e) {
     console.error('Failed to send message to renderer:', e);
-  }
-}
-
-function revealWindow() {
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  if (!win.isVisible()) win.show();
-  win.focus();
-  try {
-    win.flashFrame(true);
-    setTimeout(() => {
-      if (win && !win.isDestroyed()) win.flashFrame(false);
-    }, 3000);
-  } catch (e) {}
-}
-
-function getFormattedDate() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const year = String(now.getFullYear()).slice(-2);
-  let hours = now.getHours();
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours %= 12;
-  hours ||= 12;
-  const formattedHours = String(hours).padStart(2, '0');
-  return `${month}-${day}-${year} ${formattedHours}:${minutes} ${ampm}`;
-}
-
-async function createDesktopSdkUpload() {
-  const url = `${process.env.RECALLAI_API_URL}/api/v1/sdk-upload/`;
-
-  const response = await axios.post(url, {
-    recording_config: {
-      video_mixed_mp4: null,
-      audio_mixed_mp3: {},
-      realtime_endpoints: [
-        {
-          type: 'desktop_sdk_callback',
-          events: ['audio_mixed_raw.data']
-        },
-      ],
-    }
-  }, {
-    headers: { 'Authorization': `Token ${process.env.RECALLAI_API_KEY}` },
-    timeout: 3000,
-  });
-
-  return response.data;
-}
-
-async function startRecording(windowId) {
-  console.log('recording started', windowId);
-
-  try {
-    const { upload_token } = await createDesktopSdkUpload();
-
-    if (!upload_token) {
-      throw new Error('No upload token received from the server.');
-    }
-
-    RecallAiSdk.startRecording({
-      windowId: windowId,
-      uploadToken: upload_token
-    });
-
-    await RecallAiSdk.requestPermission('accessibility');
-    await RecallAiSdk.requestPermission('microphone system-audio');
-    await RecallAiSdk.requestPermission('system-audio');
-
-    console.log('Permissions requested');
-
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('current-window-id', windowId);
-    }
-  } catch (error) {
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-    }
-    console.error('Error in startRecording:', error.message);
-
-    dialog.showErrorBox(
-      'Recording Error',
-      `Failed to start recording:\n${error.message}`
-    );
-
-    if (process.platform === 'darwin') app.dock.bounce('critical');
   }
 }
 
@@ -267,9 +167,7 @@ function showWindow() {
 }
 
 function createTray() {
-  let iconPath;
-  if (app.isPackaged) iconPath = path.join(process.resourcesPath, 'build', 'vitt-logo.png');
-  else iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
+  const iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
 
   try {
     tray = new Tray(iconPath);
@@ -367,149 +265,6 @@ app.whenReady().then(() => {
     // Keep app alive like standard tray apps.
   });
 
-  console.log('recall', RecallAiSdk);
-
-  RecallAiSdk.addEventListener('permission-status', async (evt) => {
-    const { permission, status } = evt;
-    console.log(`Permission: ${permission}, Status: ${status}`);
-  });
-
-  RecallAiSdk.addEventListener('permissions-granted', async () => {
-    console.log('Permissions granted, ready to record');
-    state.permissions_granted = true;
-    setInterval(sendState, 1000);
-  });
-
-  RecallAiSdk.addEventListener('meeting-updated', async (evt) => {
-    console.log('Meeting updated', evt);
-  });
-
-  RecallAiSdk.addEventListener('realtime-event', async (evt) => {
-    console.log('realtime event', evt);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('recall-buffer', evt);
-    }
-  });
-
-  RecallAiSdk.addEventListener('media-capture-status', async (evt) => {
-    console.log(evt);
-  });
-
-  RecallAiSdk.addEventListener('error', async (evt) => {
-    const { type, message } = evt;
-
-    if (type === 'upload') {
-      for (const meeting of state.meetings) {
-        if (meeting.id === evt.window.id) meeting.status = 'failed';
-      }
-      sendState();
-      dialog.showErrorBox('Upload error', `There was an error uploading the recording. Reason: ${message}`);
-    } else {
-      dialog.showErrorBox('Error', `An error occurred. Reason: ${type} -- ${message}`);
-    }
-
-    new Notification({
-      title: 'Error',
-      body: 'An error occured.',
-    }).show();
-
-    revealWindow();
-
-    if (process.platform === 'darwin') app.dock.bounce('critical');
-
-    console.error('ERROR: ', type, message);
-  });
-
-  RecallAiSdk.addEventListener('upload-progress', async (evt) => {
-    for (const meeting of state.meetings) {
-      if (meeting.id === evt.window.id) meeting.uploadPercentage = evt.progress;
-      if (evt.progress === 100) meeting.status = 'completed';
-    }
-    sendState();
-  });
-
-  RecallAiSdk.addEventListener('recording-ended', async (evt) => {
-    state.meetings.push({ title: getFormattedDate(), id: evt.window.id, uploadPercentage: 0, status: 'in-progress' });
-    sendState();
-    RecallAiSdk.uploadRecording({ windowId: evt.window.id });
-  });
-
-  RecallAiSdk.addEventListener('meeting-closed', async (evt) => {
-    console.log('MEETING CLOSED', evt);
-    const closedId = evt?.window?.id;
-    if (closedId) {
-      detectedMeetings = detectedMeetings.filter((m) => m.id !== closedId);
-    } else {
-      detectedMeetings = [];
-    }
-    sendDetectedMeetingsState();
-  });
-
-  RecallAiSdk.addEventListener('meeting-detected', async (evt) => {
-    console.log('MEETING DETECTED', evt);
-    const meeting = meetingFromEvent(evt);
-    if (!meeting) return;
-
-    if (!detectedMeetings.some((m) => m.id === meeting.id)) {
-      detectedMeetings.push(meeting);
-    }
-    sendDetectedMeetingsState();
-
-    const notif = new Notification({
-      title: 'Meeting detected',
-      body: 'Click here to record the meeting.',
-      actions: [
-        { type: 'button', text: 'Record' },
-        { type: 'button', text: 'Ignore' }
-      ]
-    });
-
-    notif.on('action', async (_action, index) => {
-      if (index === 0) await startRecording(meeting.id);
-    });
-
-    notif.on('click', async () => {
-      await startRecording(meeting.id);
-    });
-
-    notif.show();
-    revealWindow();
-  });
-
-  RecallAiSdk.addEventListener('sdk-state-change', (event) => {
-    try {
-      switch (event.sdk.state.code) {
-        case 'recording':
-          if (process.platform === 'darwin') app.dock.setBadge('Recording');
-          console.log('=== Recording started:', event);
-          state.recording = true;
-          sendState();
-          break;
-        case 'idle':
-          if (process.platform === 'darwin') app.dock.setBadge('');
-          console.log('=== Recording idle:', event);
-          state.recording = false;
-          sendState();
-          break;
-        case 'paused':
-          if (process.platform === 'darwin') app.dock.setBadge('Paused');
-          console.log('=== Recording paused:', event);
-          state.recording = false;
-          sendState();
-          break;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  });
-
-  RecallAiSdk.init({
-    api_url: process.env.RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ['microphone', 'accessibility', 'system-audio'],
-    config: {},
-    restartOnError: true
-  });
-
   ipcMain.on('close-app', () => {
     app.quit();
   });
@@ -593,24 +348,9 @@ app.whenReady().then(() => {
         sendDetectedMeetingsState();
         break;
       case 'reupload':
-        RecallAiSdk.uploadRecording({ windowId: arg.id });
+      case 'start-recording':
+      case 'stop-recording':
         break;
-      case 'start-recording': {
-        const windowId = arg.id ?? detectedMeetings[0]?.id;
-        if (!windowId) {
-          dialog.showMessageBoxSync(null, { message: 'There is no meeting in progress.' });
-          break;
-        }
-        await startRecording(windowId);
-        break;
-      }
-      case 'stop-recording': {
-        const windowId = arg.id ?? detectedMeetings[0]?.id;
-        if (windowId) {
-          RecallAiSdk.stopRecording({ windowId });
-        }
-        break;
-      }
     }
   });
 });

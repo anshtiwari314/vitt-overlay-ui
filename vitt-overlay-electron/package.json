@@ -9,18 +9,17 @@
     "start": "electron .",
     "dev": "electron .",
     "build:renderer": "cd ../vitt-overlay-react-client && npm run build",
-    "dist": "npm run build:renderer && electron-builder"
+    "dist": "npm run build:renderer && electron-builder",
+    "dist:win:portable": "npm run build:renderer && electron-builder --win portable"
   },
   "keywords": [],
-  "author": "",
+  "author": "Vitt AI",
   "license": "ISC",
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.1.0",
     "@fortawesome/react-fontawesome": "^3.1.0",
-    "@recallai/desktop-sdk": "^2.0.4",
     "@reduxjs/toolkit": "^2.9.0",
     "@ricky0123/vad-react": "^0.0.30",
-    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "electron-context-menu": "^4.0.4",
     "html-react-parser": "^5.2.16",
@@ -41,7 +40,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "baseline-browser-mapping": "^2.9.13",
     "electron": "^38.1.0",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.11.0",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -53,6 +52,7 @@
   "build": {
     "appId": "com.VittAi.overlay",
     "productName": "Overlay-Vitt",
+    "forceCodeSigning": false,
     "files": [
       "dist",
       "main.js",
@@ -72,7 +72,11 @@
     ],
     "win": {
       "target": "portable",
-      "icon": "build/vitt-logo.png"
+      "icon": "build/vitt-logo.png",
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false,
+      "requestedExecutionLevel": "asInvoker",
+      "legalTrademarks": "Vitt AI"
     },
     "mac": {
       "target": [
