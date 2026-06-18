@@ -358,6 +358,12 @@
   color: var(--text-main);
 }
 
+.prompt-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .prompt-trigger-btn {
   display: inline-flex;
   align-items: center;
@@ -374,6 +380,16 @@
   text-transform: uppercase;
   cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.prompt-trigger-btn-secondary {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, rgba(100, 116, 139, 0.28), rgba(30, 41, 59, 0.82));
+  color: #f8fafc;
+}
+
+.prompt-trigger-btn-secondary:hover:not(:disabled) {
+  border-color: rgba(203, 213, 225, 0.48);
 }
 
 .prompt-trigger-btn:hover:not(:disabled) {
