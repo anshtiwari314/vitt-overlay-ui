@@ -21,6 +21,7 @@ import {
   Mic,
   Minus,
   Pause,
+  RefreshCw,
   Settings,
   Sparkles,
   SunMedium,
@@ -894,6 +895,22 @@ export default function App() {
     meetingsRef.current = meetings
   }, [meetings])
 
+  const sendClientInit = (ws: WebSocket) => {
+    const initUserid =
+      currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
+    ws.send(
+      JSON.stringify({
+        type: 'client-init',
+        message: 'Hello from browser!',
+        source: currentUserRef.current?.source ?? '',
+        userid: initUserid,
+        sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
+        roomId: initUserid,
+        timestamp: getTimeStamp()
+      })
+    )
+  }
+
   const socketUrl = useMemo(() => {
     try {
       const url = new URL(wsUrl)
@@ -1048,6 +1065,7 @@ export default function App() {
   const dispatch = useDispatch()
   const dispatchRef = useRef(dispatch)
   dispatchRef.current = dispatch
+  const wsReconnectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const ref = wsRef as React.MutableRefObject<WebSocket | null>
@@ -1091,20 +1109,7 @@ export default function App() {
       tempWs.onopen = () => {
         if (disposed) return
         setIsServerConnected(true)
-        const initUserid =
-          currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
-        tempWs.send(
-          JSON.stringify({
-            type: 'client-init',
-            message: 'Hello from browser!',
-            source: currentUserRef.current?.source ?? '',
-            userid: initUserid,
-            sessionid:
-              currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
-            roomId: initUserid,
-            timestamp: getTimeStamp()
-          })
-        )
+        sendClientInit(tempWs)
       }
 
       tempWs.onmessage = (event: MessageEvent) => {
@@ -1210,10 +1215,17 @@ export default function App() {
       }
     }
 
+    wsReconnectRef.current = () => {
+      clearReconnect()
+      setIsServerConnected(false)
+      connect()
+    }
+
     connect()
 
     return () => {
       disposed = true
+      wsReconnectRef.current = null
       teardownWs()
     }
   }, [socketUrl, wsRef])
@@ -1388,6 +1400,35 @@ export default function App() {
     }
   }
 
+  const triggerRefresh = () => {
+    dispatch(clearTranscriptions())
+    dispatch(clearPrompts())
+    dispatch(clearChat())
+
+    if (pendingSendRef.current) {
+      clearTimeout(pendingSendRef.current)
+      pendingSendRef.current = null
+    }
+
+    if (suggestTimeoutRef.current) {
+      clearTimeout(suggestTimeoutRef.current)
+      suggestTimeoutRef.current = null
+    }
+
+    focusedFieldIdRef.current = null
+    lastSentDataRef.current = ''
+    prevAssistantMsgCount.current = 0
+    prevPromptsCount.current = 0
+    prevDataLen.current = 0
+
+    setDataInfoItems([])
+    setUnreadTabs(new Set())
+    setIsSuggesting(false)
+    setIsServerConnected(false)
+
+    wsReconnectRef.current?.()
+  }
+
   const triggerSuggest = () => {
     if (isSuggesting) return
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
@@ -1503,10 +1544,16 @@ export default function App() {
               {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
             </div>
           </div>
-          <button type="button" className="prompt-trigger-btn" onClick={triggerSuggest} disabled={isSuggesting}>
-            <Sparkles size={13} style={{ marginRight: 4 }} />
-            {isSuggesting ? 'Thinking...' : 'Suggest'}
-          </button>
+          <div className="prompt-actions">
+            <button type="button" className="prompt-trigger-btn prompt-trigger-btn-secondary" onClick={triggerRefresh}>
+              <RefreshCw size={13} style={{ marginRight: 4 }} />
+              Refresh
+            </button>
+            <button type="button" className="prompt-trigger-btn" onClick={triggerSuggest} disabled={isSuggesting}>
+              <Sparkles size={13} style={{ marginRight: 4 }} />
+              {isSuggesting ? 'Thinking...' : 'Suggest'}
+            </button>
+          </div>
         </div>
 
         <div className="status-section no-drag" />
