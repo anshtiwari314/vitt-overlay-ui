@@ -1,4 +1,4 @@
-import { createSlice, current } from "@reduxjs/toolkit";
+import { createSlice } from "@reduxjs/toolkit";
 
 let initialLoadState = [
   {
@@ -308,14 +308,21 @@ let transcriptionSlice = createSlice({
     initialState:{transcriptions:[]},
     reducers:{
         addTranscription:(state,action)=>{
-            //console.log('add Transcription triggers',state,action)
+            const p = action.payload
             let tempObj = {
-              transcription:action.payload.text,
-              speaker:action.payload.speaker
+              transcription: p.text,
+              speaker: p.speaker,
+              asrModel: p.asrModel ?? p.asr_model,
+              asrModelLabel: p.asrModelLabel ?? p.asr_model_label,
+              asrLatencyMs: p.asrLatencyMs ?? p.asr_latency_ms,
+              lidModel: p.lidModel ?? p.lid_model,
+              lidModelLabel: p.lidModelLabel ?? p.lid_model_label,
+              lidLatencyMs: p.lidLatencyMs ?? p.lid_latency_ms,
+              audioDurationMs: p.audioDurationMs ?? p.audio_duration_ms,
+              language: p.language,
+              confidence: p.confidence,
             }
-            //console.log('tempObj',tempObj)
             state.transcriptions = [tempObj,...state.transcriptions]
-            console.log('after modifying state',current(state))
             return state;
         },
         clearTranscriptions:(state)=>{

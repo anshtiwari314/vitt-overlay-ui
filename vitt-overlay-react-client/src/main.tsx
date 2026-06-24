@@ -10,6 +10,13 @@ import store from './redux/store/store.tsx'
 
 clearLegacyStoredPreferences()
 
+const isLinux =
+  typeof navigator !== 'undefined' &&
+  (/linux/i.test(navigator.userAgent) || /linux/i.test(navigator.platform))
+if (isLinux) {
+  document.documentElement.classList.add('platform-linux')
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ReduxProvider store={store}>

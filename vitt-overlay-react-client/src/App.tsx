@@ -2,6 +2,19 @@ import React, { useEffect, useRef, useState, useLayoutEffect, useCallback, useMe
 import { useDispatch, useSelector } from 'react-redux'
 import { v4 as uuidv4 } from 'uuid'
 import './App.css'
+import { MicrophoneMediaRecorder, type MicrophoneMediaRecorderState } from './functions/MicrophoneMediaRecorder'
+import {
+  ASR_MODELS,
+  getAsrModelId,
+  getAsrModelLabel,
+  setAsrModelId
+} from './functions/asrModels'
+import {
+  LID_MODELS,
+  getLidModelId,
+  getLidModelLabel,
+  setLidModelId
+} from './functions/lidModels'
 import { addTranscription, clearTranscriptions } from './redux/reducers/TranscriptionReducer'
 import { addPrompt, clearPrompts } from './redux/reducers/promptsReducer'
 import { addConversationTurn, addIncomingMessages, addOutgoingMessage, clearChat } from './redux/reducers/chatWithAIReducer'
@@ -294,12 +307,59 @@ function formatAiAssistContent(raw: string) {
   return blocks.join('')
 }
 
-function TranscriptionList() {
+type AsrTimingSnapshot = {
+  asrModelLabel: string
+  asrLatencyMs: number
+  audioDurationMs?: number
+  empty?: boolean
+}
+
+type LidTimingSnapshot = {
+  lidModelLabel: string
+  language: string
+  confidence?: number
+  lidLatencyMs: number
+  audioDurationMs?: number
+}
+
+function TranscriptionList({
+  lastAsrTiming,
+  lastLidTiming
+}: {
+  lastAsrTiming?: AsrTimingSnapshot | null
+  lastLidTiming?: LidTimingSnapshot | null
+}) {
   const transcriptions = useSelector((state: { transcriptionReducer: { transcriptions: { speaker?: string; transcription: string }[] } }) => state.transcriptionReducer.transcriptions)
   const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(transcriptions, 'top')
 
   return (
     <div className="list-wrap">
+      {lastLidTiming ? (
+        <div className="asr-timing-bar">
+          <span className="asr-timing-label">Last LID</span>
+          <span className="asr-timing-value">
+            {lastLidTiming.lidModelLabel}
+            {' · '}
+            {lastLidTiming.language}
+            {lastLidTiming.confidence != null ? ` (${Math.round(lastLidTiming.confidence * 1000) / 10}%)` : ''}
+            {' · '}
+            {lastLidTiming.lidLatencyMs} ms
+            {lastLidTiming.audioDurationMs != null ? ` · ${lastLidTiming.audioDurationMs} ms audio` : ''}
+          </span>
+        </div>
+      ) : null}
+      {lastAsrTiming ? (
+        <div className="asr-timing-bar">
+          <span className="asr-timing-label">Last ASR</span>
+          <span className="asr-timing-value">
+            {lastAsrTiming.asrModelLabel}
+            {' · '}
+            {lastAsrTiming.asrLatencyMs} ms
+            {lastAsrTiming.audioDurationMs != null ? ` · ${lastAsrTiming.audioDurationMs} ms audio` : ''}
+            {lastAsrTiming.empty ? ' · (no speech)' : ''}
+          </span>
+        </div>
+      ) : null}
       <div className="content-list" ref={ref}>
         {transcriptions.map((entry, index) => (
           <TranscriptionItem e={entry} key={index} highlighted={isHighlighted(index)} />
@@ -310,11 +370,71 @@ function TranscriptionList() {
   )
 }
 
-function TranscriptionItem({ e, highlighted }: { e: { speaker?: string; transcription: string }; highlighted?: boolean }) {
+function formatTranscriptMeta(e: {
+  asrModelLabel?: string
+  asrModel?: string
+  asrLatencyMs?: number
+  lidModelLabel?: string
+  lidModel?: string
+  lidLatencyMs?: number
+  audioDurationMs?: number
+  language?: string
+  confidence?: number
+}): string | null {
+  const lidLabel = e.lidModelLabel ?? (e.lidModel ? getLidModelLabel(e.lidModel) : '')
+  const asrLabel = e.asrModelLabel ?? (e.asrModel ? getAsrModelLabel(e.asrModel) : '')
+  if (!lidLabel && !asrLabel && e.lidLatencyMs == null && e.asrLatencyMs == null) return null
+
+  const parts: string[] = []
+  if (lidLabel) {
+    let lidPart = lidLabel
+    if (e.language) lidPart += ` · ${e.language}`
+    if (e.confidence != null && Number.isFinite(e.confidence)) {
+      lidPart += ` (${Math.round(e.confidence * 1000) / 10}%)`
+    }
+    if (e.lidLatencyMs != null && Number.isFinite(e.lidLatencyMs)) {
+      lidPart += ` · ${e.lidLatencyMs} ms LID`
+    }
+    parts.push(lidPart)
+  }
+  if (asrLabel) {
+    let asrPart = asrLabel
+    if (e.asrLatencyMs != null && Number.isFinite(e.asrLatencyMs)) {
+      asrPart += ` · ${e.asrLatencyMs} ms ASR`
+    }
+    parts.push(asrPart)
+  }
+  if (e.audioDurationMs != null && Number.isFinite(e.audioDurationMs)) {
+    parts.push(`${e.audioDurationMs} ms audio`)
+  }
+  return parts.length ? parts.join(' · ') : null
+}
+
+function TranscriptionItem({
+  e,
+  highlighted
+}: {
+  e: {
+    speaker?: string
+    transcription: string
+    asrModel?: string
+    asrModelLabel?: string
+    asrLatencyMs?: number
+    lidModel?: string
+    lidModelLabel?: string
+    lidLatencyMs?: number
+    audioDurationMs?: number
+    language?: string
+    confidence?: number
+  }
+  highlighted?: boolean
+}) {
+  const meta = formatTranscriptMeta(e)
+
   return (
     <div className={`transcription-card${highlighted ? ' highlight-new' : ''}`}>
-      {e.speaker && <div className="transcription-header">{e.speaker}</div>}
       <div className="transcription-text">{e.transcription}</div>
+      {meta ? <div className="transcription-meta">{meta}</div> : null}
     </div>
   )
 }
@@ -536,17 +656,25 @@ function SettingsTab({
   setTransparency,
   currentUser,
   openExternal,
-  onLogout
+  onLogout,
+  onAsrModelChange,
+  onLidModelChange
 }: {
   transparency: number
   setTransparency: (v: number) => void
   currentUser: { userid?: string; id?: string; name?: string; email?: string; role?: string } | null
   openExternal: (url: string) => void
   onLogout: () => void
+  onAsrModelChange: (modelId: string) => void
+  onLidModelChange: (modelId: string) => void
 }) {
   const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
   const [language, setLanguage] = useState('english')
+  const [asrModel, setAsrModel] = useState(getAsrModelId)
+  const [lidModel, setLidModel] = useState(getLidModelId)
   const [serverUrlSaveMsg, setServerUrlSaveMsg] = useState<string | null>(null)
+  const [asrSaveMsg, setAsrSaveMsg] = useState<string | null>(null)
+  const [lidSaveMsg, setLidSaveMsg] = useState<string | null>(null)
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
@@ -583,6 +711,62 @@ function SettingsTab({
             <option value="hindi">Hindi</option>
             <option value="marathi">Marathi</option>
           </select>
+        </div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <span className="setting-label">Speech recognition (ASR)</span>
+          <select
+            className="setting-input"
+            style={{ width: '100%' }}
+            value={asrModel}
+            onChange={(e) => {
+              const next = e.target.value
+              setAsrModel(next)
+              setAsrModelId(next)
+              onAsrModelChange(next)
+              setAsrSaveMsg(`Using ${getAsrModelLabel(next)}. Applies to the next utterance.`)
+              window.setTimeout(() => setAsrSaveMsg(null), 3200)
+            }}
+          >
+            {ASR_MODELS.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+          <span className="setting-label" style={{ fontSize: 10, lineHeight: 1.4, textTransform: 'none', fontWeight: 500 }}>
+            {ASR_MODELS.find((m) => m.id === asrModel)?.description ?? 'Open-source model loaded on the server.'}
+          </span>
+          {asrSaveMsg ? (
+            <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{asrSaveMsg}</span>
+          ) : null}
+        </div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <span className="setting-label">Language identification (LID)</span>
+          <select
+            className="setting-input"
+            style={{ width: '100%' }}
+            value={lidModel}
+            onChange={(e) => {
+              const next = e.target.value
+              setLidModel(next)
+              setLidModelId(next)
+              onLidModelChange(next)
+              setLidSaveMsg(`Using ${getLidModelLabel(next)}. Applies to the next utterance.`)
+              window.setTimeout(() => setLidSaveMsg(null), 3200)
+            }}
+          >
+            {LID_MODELS.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+          <span className="setting-label" style={{ fontSize: 10, lineHeight: 1.4, textTransform: 'none', fontWeight: 500 }}>
+            {LID_MODELS.find((m) => m.id === lidModel)?.description ?? 'Detect spoken language from audio on the server.'}
+          </span>
+          {lidSaveMsg ? (
+            <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{lidSaveMsg}</span>
+          ) : null}
         </div>
         <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
@@ -804,6 +988,8 @@ export default function App() {
     permissions_granted: true,
     meetings: [] as { id: string; title: string; status: string; uploadPercentage?: number }[]
   })
+  const [micRecorderState, setMicRecorderState] = useState<MicrophoneMediaRecorderState>('idle')
+  const micRecorderRef = useRef<MicrophoneMediaRecorder | null>(null)
 
   const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string;source?:string} | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -878,6 +1064,12 @@ export default function App() {
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
   const prevMeetingsCountRef = useRef(0)
   const [copyToast, setCopyToast] = useState(false)
+  const [lastAsrTiming, setLastAsrTiming] = useState<AsrTimingSnapshot | null>(null)
+  const setLastAsrTimingRef = useRef(setLastAsrTiming)
+  setLastAsrTimingRef.current = setLastAsrTiming
+  const [lastLidTiming, setLastLidTiming] = useState<LidTimingSnapshot | null>(null)
+  const setLastLidTimingRef = useRef(setLastLidTiming)
+  setLastLidTimingRef.current = setLastLidTiming
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
   const recordingMeetingId = activeMeetingId ?? meetings[0]?.id ?? null
@@ -996,6 +1188,45 @@ export default function App() {
 
     return () => clearInterval(timer)
   }, [])
+  useEffect(() => {
+    micRecorderRef.current = new MicrophoneMediaRecorder({
+      getWs: () => (wsRef as React.MutableRefObject<WebSocket | null>).current,
+      getUserid: () =>
+        currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+      getSessionid: () => sessionuidRef.current ?? '',
+      onStateChange: setMicRecorderState,
+      onError: (error) => console.error('MicrophoneMediaRecorder error', error)
+    })
+
+    return () => {
+      micRecorderRef.current?.stop()
+      micRecorderRef.current = null
+    }
+  }, [wsRef])
+
+  const isMicRecording = micRecorderState === 'recording'
+  const isMicPaused = micRecorderState === 'paused'
+  const isRecordingActive = sdkState.recording || isMicRecording
+
+  const handleStartRecording = async () => {
+    try {
+      await micRecorderRef.current?.start()
+      recallElectronAPI?.send('message-from-renderer', {
+        command: 'start-recording',
+        id: recordingMeetingId
+      })
+    } catch (error) {
+      console.error('Failed to start microphone recording', error)
+    }
+  }
+
+  const handlePauseRecording = () => {
+    micRecorderRef.current?.pause()
+    recallElectronAPI?.send('message-from-renderer', {
+      command: 'stop-recording',
+      id: recordingMeetingId
+    })
+  }
 
   useEffect(() => {
     if (!recallElectronAPI) return
@@ -1102,6 +1333,8 @@ export default function App() {
             sessionid:
               currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
             roomId: initUserid,
+            asrModel: getAsrModelId(),
+            lidModel: getLidModelId(),
             timestamp: getTimeStamp()
           })
         )
@@ -1117,10 +1350,124 @@ export default function App() {
               ? (result.data as Record<string, unknown>)
               : null
 
+          if (result.type === 'asr-timing') {
+            const asrModel = (result.asrModel ?? result.asr_model) as string | undefined
+            const asrModelLabelRaw = (result.asrModelLabel ?? result.asr_model_label) as string | undefined
+            const asrLatencyRaw = result.asrLatencyMs ?? result.asr_latency_ms
+            const audioDurationRaw = result.audioDurationMs ?? result.audio_duration_ms
+            const asrLatencyMs =
+              typeof asrLatencyRaw === 'number'
+                ? asrLatencyRaw
+                : typeof asrLatencyRaw === 'string'
+                  ? Number(asrLatencyRaw)
+                  : NaN
+            const audioDurationMs =
+              typeof audioDurationRaw === 'number'
+                ? audioDurationRaw
+                : typeof audioDurationRaw === 'string'
+                  ? Number(audioDurationRaw)
+                  : undefined
+
+            if (Number.isFinite(asrLatencyMs)) {
+              setLastAsrTimingRef.current({
+                asrModelLabel:
+                  asrModelLabelRaw ??
+                  (asrModel ? getAsrModelLabel(asrModel) : 'ASR'),
+                asrLatencyMs,
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined,
+                empty: Boolean(result.empty)
+              })
+            }
+          }
+
+          if (result.type === 'language-detection') {
+            const text = (result.text ?? result.transcription) as string | undefined
+            const speaker = result.speaker as string | undefined
+            const language = (result.language ?? result.languageCode) as string | undefined
+            const confidenceRaw = result.confidence
+            const lidModel = (result.lidModel ?? result.lid_model) as string | undefined
+            const lidModelLabelRaw = (result.lidModelLabel ?? result.lid_model_label) as string | undefined
+            const lidLatencyRaw = result.lidLatencyMs ?? result.lid_latency_ms
+            const audioDurationRaw = result.audioDurationMs ?? result.audio_duration_ms
+            const confidence =
+              typeof confidenceRaw === 'number'
+                ? confidenceRaw
+                : typeof confidenceRaw === 'string'
+                  ? Number(confidenceRaw)
+                  : undefined
+            const lidLatencyMs =
+              typeof lidLatencyRaw === 'number'
+                ? lidLatencyRaw
+                : typeof lidLatencyRaw === 'string'
+                  ? Number(lidLatencyRaw)
+                  : NaN
+            const audioDurationMs =
+              typeof audioDurationRaw === 'number'
+                ? audioDurationRaw
+                : typeof audioDurationRaw === 'string'
+                  ? Number(audioDurationRaw)
+                  : undefined
+
+            if (Number.isFinite(lidLatencyMs)) {
+              setLastLidTimingRef.current({
+                lidModelLabel:
+                  lidModelLabelRaw ??
+                  (lidModel ? getLidModelLabel(lidModel) : 'LID'),
+                language: language ?? text ?? 'unknown',
+                confidence: Number.isFinite(confidence) ? confidence : undefined,
+                lidLatencyMs,
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined
+              })
+            }
+
+            d(
+              addTranscription({
+                text: text ?? '',
+                speaker,
+                language,
+                confidence: Number.isFinite(confidence) ? confidence : undefined,
+                lidModel,
+                lidModelLabel:
+                  lidModelLabelRaw ??
+                  (lidModel ? getLidModelLabel(lidModel) : undefined),
+                lidLatencyMs: Number.isFinite(lidLatencyMs) ? lidLatencyMs : undefined,
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined
+              })
+            )
+          }
+
           if (result.type === 'transcript') {
             const text = (result.text ?? result.transcription) as string | undefined
             const speaker = result.speaker as string | undefined
-            d(addTranscription({ ...result, text: text ?? '', speaker }))
+            const asrModel = (result.asrModel ?? result.asr_model) as string | undefined
+            const asrModelLabelRaw = (result.asrModelLabel ?? result.asr_model_label) as string | undefined
+            const asrLatencyRaw = result.asrLatencyMs ?? result.asr_latency_ms
+            const audioDurationRaw = result.audioDurationMs ?? result.audio_duration_ms
+            const asrLatencyMs =
+              typeof asrLatencyRaw === 'number'
+                ? asrLatencyRaw
+                : typeof asrLatencyRaw === 'string'
+                  ? Number(asrLatencyRaw)
+                  : undefined
+            const audioDurationMs =
+              typeof audioDurationRaw === 'number'
+                ? audioDurationRaw
+                : typeof audioDurationRaw === 'string'
+                  ? Number(audioDurationRaw)
+                  : undefined
+
+            d(
+              addTranscription({
+                text: text ?? '',
+                speaker,
+                asrModel,
+                asrModelLabel:
+                  asrModelLabelRaw ??
+                  (asrModel ? getAsrModelLabel(asrModel) : undefined),
+                asrLatencyMs: Number.isFinite(asrLatencyMs) ? asrLatencyMs : undefined,
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined
+              })
+            )
           }
 
           const rawDataInfo = result.data_info ?? nestedData?.data_info
@@ -1129,7 +1476,7 @@ export default function App() {
             if (Array.isArray(rawDataInfo)) {
               nextDataInfoItems = rawDataInfo as DataInfoField[]
             } else if (typeof rawDataInfo === 'object' && rawDataInfo != null) {
-              nextDataInfoItems = [rawDataInfo as DataInfoField]
+              nextDataInfoItems = [rawDataInfo as DataInftransoField]
             }
 
             if (nextDataInfoItems.length > 0) {
@@ -1160,15 +1507,6 @@ export default function App() {
                 : []
             ).filter((item) => item.trim() && item.trim() !== aiChat?.trim())
             const res_timestamp = (result.res_timestamp ?? nestedData?.res_timestamp) as string | undefined
-
-            if (transcript?.trim()) {
-              d(
-                addTranscription({
-                  text: transcript.trim(),
-                  speaker: (result.speaker ?? nestedData?.speaker) as string | undefined
-                })
-              )
-            }
 
             const cleanedAiPrompt = aiPrompt ? sanitizeAiAssistText(aiPrompt) : ''
 
@@ -1362,6 +1700,8 @@ export default function App() {
       permissions_granted: true,
       meetings: []
     })
+    micRecorderRef.current?.stop()
+    setMicRecorderState('idle')
   }, [dispatch, wsRef])
 
   useEffect(() => {
@@ -1387,6 +1727,32 @@ export default function App() {
       console.error('copy failed', e)
     }
   }
+
+  const sendLidModelConfig = useCallback((modelId: string) => {
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws?.readyState !== WebSocket.OPEN) return
+    ws.send(
+      JSON.stringify({
+        type: 'lid-config',
+        lidModel: modelId,
+        userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+        sessionid: sessionuidRef.current ?? fallbackSessionIdRef.current
+      })
+    )
+  }, [wsRef])
+
+  const sendAsrModelConfig = useCallback((modelId: string) => {
+    const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
+    if (ws?.readyState !== WebSocket.OPEN) return
+    ws.send(
+      JSON.stringify({
+        type: 'asr-config',
+        asrModel: modelId,
+        userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+        sessionid: sessionuidRef.current ?? fallbackSessionIdRef.current
+      })
+    )
+  }, [wsRef])
 
   const triggerSuggest = () => {
     if (isSuggesting) return
@@ -1517,28 +1883,18 @@ export default function App() {
               <>
                 <button
                   type="button"
-                  className={`btn-primary ${sdkState.recording ? 'recording' : ''}`}
-                  disabled={sdkState.recording}
-                  onClick={() =>
-                    recallElectronAPI?.send('message-from-renderer', {
-                      command: 'start-recording',
-                      id: recordingMeetingId
-                    })
-                  }
+                  className={`btn-primary ${isRecordingActive ? 'recording' : ''}`}
+                  disabled={isMicRecording}
+                  onClick={() => void handleStartRecording()}
                 >
                   <Mic size={18} />
-                  {sdkState.recording ? 'Recording...' : 'Start Recording'}
+                  {isMicPaused ? 'Resume Recording' : isRecordingActive ? 'Recording...' : 'Start Recording'}
                 </button>
                 <button
                   type="button"
                   className="btn-primary"
-                  disabled={!sdkState.recording}
-                  onClick={() =>
-                    recallElectronAPI?.send('message-from-renderer', {
-                      command: 'stop-recording',
-                      id: recordingMeetingId
-                    })
-                  }
+                  disabled={!isMicRecording && !sdkState.recording}
+                  onClick={handlePauseRecording}
                 >
                   <Pause size={18} />
                   Pause
@@ -1553,7 +1909,9 @@ export default function App() {
         )}
 
         <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {selectedTab === 'transcript' && <TranscriptionList />}
+          {selectedTab === 'transcript' && (
+            <TranscriptionList lastAsrTiming={lastAsrTiming} lastLidTiming={lastLidTiming} />
+          )}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
           {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} source={source} />}
           {selectedTab === 'prompts' && <PromptList />}
@@ -1573,6 +1931,8 @@ export default function App() {
               currentUser={currentUser}
               openExternal={openExternal}
               onLogout={handleLogout}
+              onAsrModelChange={sendAsrModelConfig}
+              onLidModelChange={sendLidModelConfig}
             />
           )}
         </div>
@@ -1586,7 +1946,9 @@ export default function App() {
         </div>
 
         <div className="toast-container">
-          <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
+          <div className={`toast ${copyToast ? 'visible' : ''}`}>
+            Copied to clipboard
+          </div>
         </div>
 
         <div className="bottom-hint no-drag">
@@ -1611,7 +1973,12 @@ function TabButton({
   hasUnread?: boolean
 }) {
   return (
-    <button type="button" className={`tab-btn ${active ? 'active' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      className={`tab-btn no-drag ${active ? 'active' : ''}`}
+      onClick={onClick}
+      title={label}
+    >
       <span className="tab-icon-wrap">
         {icon}
         {hasUnread && !active && <span className="tab-unread-dot" />}
