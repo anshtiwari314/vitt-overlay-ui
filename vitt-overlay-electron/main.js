@@ -25,6 +25,14 @@ for (const envPath of envCandidates) {
 
 import { app, BrowserWindow, ipcMain, shell, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
 import contextMenu from 'electron-context-menu';
+import { launchChromeWithExtension, getExtensionPath } from './browserCapture.js';
+import {
+  startExtensionBridge,
+  enqueueExtensionJob,
+  setExtensionBridgeListener,
+  getExtensionBridgeUrl,
+  isExtensionBridgeConnected
+} from './extensionBridge.js';
 
 // Right-click context menu (cut/copy/paste/select-all) for any editable
 // field in any renderer. Without this, macOS users cannot right-click→Paste
@@ -45,11 +53,22 @@ let isClickThrough = true;
 /** Active detected meetings. Source of truth for renderer UI. */
 let detectedMeetings = [];
 
-let state = {
-  recording: false,
-  permissions_granted: true,
-  meetings: [],
-};
+function sendScrapeBridgeEvent(payload) {
+  try {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('scrape-bridge-event', payload);
+    }
+  } catch (e) {
+    console.error('sendScrapeBridgeEvent', e);
+  }
+}
+
+function notifyExtensionStatus() {
+  sendScrapeBridgeEvent({
+    type: 'extension_status',
+    connected: isExtensionBridgeConnected()
+  });
+}
 
 function sendDetectedMeetingsState() {
   try {
@@ -250,6 +269,14 @@ app.setAppUserModelId('com.VittAi.overlay');
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 
+  startExtensionBridge();
+  setExtensionBridgeListener((payload) => {
+    sendScrapeBridgeEvent(payload);
+    if (payload.type === 'extension_status' || payload.type === 'job_status') {
+      notifyExtensionStatus();
+    }
+  });
+
   createWindow();
   createTray();
 
@@ -337,6 +364,34 @@ app.whenReady().then(() => {
     const { width, height } = win.getBounds();
     return { width, height };
   });
+
+  ipcMain.handle('launch-browser-extension', (_event, url) => {
+    try {
+      const result = launchChromeWithExtension({ url: typeof url === 'string' ? url : undefined });
+      return { ok: true, ...result, bridgeUrl: getExtensionBridgeUrl() };
+    } catch (e) {
+      console.error('launch-browser-extension', e);
+      return { ok: false, error: e.message || String(e) };
+    }
+  });
+
+  ipcMain.handle('scrape-start', (_event, job) => {
+    if (!job?.jobId || !job?.url) {
+      return { ok: false, error: 'Invalid scrape job' };
+    }
+    enqueueExtensionJob(job);
+    notifyExtensionStatus();
+    return { ok: true };
+  });
+
+  ipcMain.handle('get-extension-bridge-url', () => getExtensionBridgeUrl());
+
+  ipcMain.handle('get-scrape-server-info', () => ({
+    httpBase: process.env.VITT_PORT ? `http://127.0.0.1:${process.env.VITT_PORT}` : 'http://127.0.0.1:5000',
+    wsUrl: process.env.VITT_PORT ? `ws://127.0.0.1:${process.env.VITT_PORT}/ws` : 'ws://127.0.0.1:5000/ws',
+    extensionPath: getExtensionPath(),
+    bridgeUrl: getExtensionBridgeUrl()
+  }));
 
   ipcMain.on('message-from-renderer', async (_event, arg) => {
     console.log('message-from-renderer', arg);

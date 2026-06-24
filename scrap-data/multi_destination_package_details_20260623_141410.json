@@ -1,0 +1,47 @@
+{
+  "Goa": [
+    {
+      "name": "Tranquil Morjim & Mandrem Escape",
+      "duration": "3N/4D",
+      "duration_details": [],
+      "features": [
+        "4 Star Hotel",
+        "1 Activity",
+        "Selected Meals",
+        "North Goa Sightseeing",
+        "Exotic Villa Stay in Goa- 3N",
+        "3N Goa"
+      ],
+      "price": "₹9,689",
+      "detail_url": "",
+      "resolved_detail_url": "",
+      "detail_summary": "",
+      "itinerary": [],
+      "policies": {},
+      "booking": {},
+      "detail_scrape_status": "failed",
+      "detail_scrape_error": "Missing listing/detail URL for Tranquil Morjim & Mandrem Escape"
+    },
+    {
+      "name": "Exotic Villa Stay in Goa- 3N",
+      "duration": "3N/4D",
+      "duration_details": [],
+      "features": [
+        "4 Star Hotel",
+        "1 Activity",
+        "Selected Meals",
+        "North Goa Sightseeing",
+        "3N Goa"
+      ],
+      "price": "₹7,698",
+      "detail_url": "",
+      "resolved_detail_url": "",
+      "detail_summary": "",
+      "itinerary": [],
+      "policies": {},
+      "booking": {},
+      "detail_scrape_status": "failed",
+      "detail_scrape_error": "Missing listing/detail URL for Exotic Villa Stay in Goa- 3N"
+    }
+  ]
+}

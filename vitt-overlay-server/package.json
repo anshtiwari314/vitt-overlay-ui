@@ -1,0 +1,15 @@
+{
+  "name": "vitt-overlay-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket server for page-capture extension jobs and overlay UI",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "Goa": [
+    {
+      "name": "The Grand Marriott Goa Experience",
+      "duration": "3N/4D",
+      "duration_details": [],
+      "features": [
+        "5 Star Hotel",
+        "Selected Meals",
+        "3N Goa",
+        "August"
+      ],
+      "price": "₹23,219",
+      "detail_url": ""
+    },
+    {
+      "name": "Serviced Apartment Holiday Special",
+      "duration": "3N/4D",
+      "duration_details": [],
+      "features": [
+        "3 Star Apartment",
+        "Airport Pickup & Drop",
+        "3N Goa",
+        "August"
+      ],
+      "price": "₹7,489",
+      "detail_url": ""
+    }
+  ]
+}

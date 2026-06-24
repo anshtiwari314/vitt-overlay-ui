@@ -1,0 +1,156 @@
+{
+  "Goa": [
+    {
+      "name": "Amazing 5N Goa Fiesta Trip",
+      "duration": "5N/6D",
+      "duration_details": [],
+      "features": [
+        "3 Star Hotel",
+        "Airport Pickup & Drop",
+        "Selected Meals",
+        "1 Activity",
+        "North Goa Sightseeing",
+        "All-Inclusive 4N Holiday",
+        "5N Goa",
+        "June",
+        "4N Goa"
+      ],
+      "price": "₹4,856",
+      "package_options": [
+        {
+          "option_label": "Default",
+          "error": "Opened detail page does not match Amazing 5N Goa Fiesta Trip (got Grow your business!)",
+          "detail_url": "https://www.makemytrip.com/holidays-india/packageCardList/",
+          "detail_scrape_status": "error"
+        }
+      ],
+      "detail_scrape_status": "error",
+      "detail_scrape_error": "Opened detail page does not match Amazing 5N Goa Fiesta Trip (got Grow your business!)"
+    },
+    {
+      "name": "Starting from - Goa",
+      "duration": "",
+      "duration_details": [],
+      "features": [],
+      "price": "₹4,798",
+      "package_options": [
+        {
+          "tabs": {
+            "itinerary": {
+              "text": "Since this package has fixed departure dates, we've updated your departure date to the earliest available date. Please view the calendar for other options. Please note that the start city of your package is Goa",
+              "lines": [
+                "Since this package has fixed departure dates, we've updated your departure date to the earliest available date. Please view the calendar for other options. Please note that the start city of your package is Goa"
+              ],
+              "days": [
+                {
+                  "day": "Day 1",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Hotel 1 Transfer",
+                    "FLIGHT",
+                    "Arrival in Goa Please Note : You need to reach Goa on your own There are more ways to reach your destination",
+                    "TRANSFER Airport to hotel in Goa REMOVEMODIFY Private Transfer Travel comfortably in a private vehicle from either Goa Airports to your hotel in Goa. Note: The pick-up timing is Airport to Hotel",
+                    "HOTEL5 Nights In Goa CHANGE 1+ 3.9 Very Good (385 Ratings) De Amour: A Dreamy Getaway, Near Beach Anjuna | 1.1 km drive to Anjuna Beach 1 Room | 2 Adults, 1 Child 25th Jun 2 PM - 30th Jun 12 PM, 5 Nights The property enjoys a fantastic location near Anjuna Beach, making it convenient for beach visits, cafes, and local attractions. Guests appreciate the friendly staff, clean rooms, and good food. The peaceful atmosphere and spacious environment offer a nice retreat. However, some have noted that maintenance could improve, particularly with room amenities. Overall, a great spot for a relaxed stay in Goa! Read more Deluxe Room (Double Bed) Breakfast is included Early Check-In upto 2 hours (subject to availability) Late Check-Out upto 2 hours (subject to availability) Complimentary Hi-Tea Read More"
+                  ],
+                  "raw_text": "Day 1 Goa INCLUDED : 1 Hotel 1 Transfer FLIGHT Arrival in Goa Please Note : You need to reach Goa on your own There are more ways to reach your destination TRANSFER Airport to hotel in Goa REMOVEMODIFY Private Transfer Travel comfortably in a private vehicle from either Goa Airports to your hotel in Goa. Note: The pick-up timing is Airport to Hotel HOTEL5 Nights In Goa CHANGE 1+ 3.9 Very Good (385 Ratings) De Amour: A Dreamy Getaway, Near Beach Anjuna | 1.1 km drive to Anjuna Beach 1 Room | 2 Adults, 1 Child 25th Jun 2 PM - 30th Jun 12 PM, 5 Nights The property enjoys a fantastic location near Anjuna Beach, making it convenient for beach visits, cafes, and local attractions. Guests appreciate the friendly staff, clean rooms, and good food. The peaceful atmosphere and spacious environment offer a nice retreat. However, some have noted that maintenance could improve, particularly with room amenities. Overall, a great spot for a relaxed stay in Goa! Read more Deluxe Room (Double Bed) Breakfast is included Early Check-In upto 2 hours (subject to availability) Late Check-Out upto 2 hours (subject to availability) Complimentary Hi-Tea Read More"
+                },
+                {
+                  "day": "Day 2",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Meal",
+                    "MEAL Breakfast In Goa"
+                  ],
+                  "raw_text": "Day 2 Goa INCLUDED : 1 Meal MEAL Breakfast In Goa"
+                },
+                {
+                  "day": "Day 3",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Meal",
+                    "MEAL Breakfast In Goa"
+                  ],
+                  "raw_text": "Day 3 Goa INCLUDED : 1 Meal MEAL Breakfast In Goa"
+                },
+                {
+                  "day": "Day 4",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Meal",
+                    "MEAL Breakfast In Goa"
+                  ],
+                  "raw_text": "Day 4 Goa INCLUDED : 1 Meal MEAL Breakfast In Goa"
+                },
+                {
+                  "day": "Day 5",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Meal",
+                    "MEAL Breakfast In Goa"
+                  ],
+                  "raw_text": "Day 5 Goa INCLUDED : 1 Meal MEAL Breakfast In Goa"
+                },
+                {
+                  "day": "Day 6",
+                  "date": "",
+                  "title": "Goa",
+                  "included": [
+                    "1"
+                  ],
+                  "entries": [
+                    "Goa Transfer 1 Meal",
+                    "MEAL Breakfast In Goa",
+                    "HOTEL CHECKOUT In Goa",
+                    "TRANSFER Hotel in Goa to Airport REMOVEMODIFY Private Transfer Travel comfortably in a private vehicle from your hotel to either of the two airports in Goa. Note: The pick-up ti Hotel to Airport",
+                    "FLIGHT",
+                    "Departure from Goa Please Note : You need to depart from Goa on your own Your Goa"
+                  ],
+                  "raw_text": "Day 6 Goa INCLUDED : 1 Transfer 1 Meal MEAL Breakfast In Goa HOTEL CHECKOUT In Goa TRANSFER Hotel in Goa to Airport REMOVEMODIFY Private Transfer Travel comfortably in a private vehicle from your hotel to either of the two airports in Goa. Note: The pick-up ti Hotel to Airport FLIGHT Departure from Goa Please Note : You need to depart from Goa on your own Your Goa"
+                }
+              ]
+            },
+            "policies": {
+              "text": "Cancellation & Date Change Package Cancellation Policy Cancellation not possible after booking Package Date Change Policy Date Change not possible after booking Terms and Conditions Exclusions Expenses of personal nature Mentioned cost is not valid between 6 pm and 8 am Anything not mentioned under inclusions Package price does not include Gala dinner charges applicable on Christmas and New Year's Eve Terms and Conditions Standard check-in time at the hotel is normally 2:00 pm and check-out is 11:00 am. An early check-in, or a late check-out is solely based on the discretion of the hotel. A maximum of 3 adults are allowed in one room. The third occupant shall be provided a mattress/rollaway bed. The itinerary is fixed and cannot be modified. Transportation shall be provided as per the itinerary and will not be at disposal. For any paid activity which is non-operational due to any unforeseen reason, we will process refund & same should reach the guest within 30 days of processing the refund. Also, for any activity which is complimentary and not charged to MMT & guest, no refund will be processed. AC will not be functional anywhere in cool or hilly areas. Entrance fee, parking and guide charges are not included in the packages. If your flights involve a combination of different airlines, you may have to collect your luggage on arrival at the connecting hub and register it again while checking in for the onward journey to your destination. Booking rates are subject to change without prior notice. Airline seats and hotel rooms are subject to availability at the time of booking. Pricing of the booking is based on the age of the passengers. Please make sure you enter the correct age of passengers at the time of booking. Passengers furnishing incorrect age details may incur penalty at the time of travelling. In case of unavailability in the listed hotels, arrangement for an alternate accommodation will be made in a hotel of similar standard. In case your package needs to be cancelled due to any natural calamity, weather conditions etc. MakeMyTrip shall strive to give you the maximum possible refund subject to the agreement made with our trade partners/vendors. MMT reserves the right to modify the itinerary at any point, due to reasons including but not limited to: Force Majeure events, strikes, fairs, festivals, weather conditions, traffic problems, overbooking of hotels / flights, cancellation / re-routing of flights, closure of /entry restrictions at a place of visit, etc. While we will do our best to make suitable alternate arrangements, we would not be held liable for any refunds/compensation claims arising out of this. Certain hotels may ask for a security deposit during check-in, which is refundable at check-out subject to the hotel policy. The booking price does not include: Expenses of personal nature, such as laundry, telephone calls, room service, alcoholic beverages, mini bar charges, tips, portage, camera fees etc. Any other items not mentioned under Inclusions are not included in the cost of the booking. The package price does not include mandatory gala dinner charges levied by the hotels especially during New Year and Christmas or any special occasions. MakeMyTrip shall try to communicate the same while booking the package. However MakeMyTrip may not have this information readily available all the time. Cost of deviation and cost of extension of the validity on your ticket is not included. For queries regarding cancellations and refunds, please refer to our Cancellation Policy. Disputes, if any, shall be subject to the exclusive jurisdiction of the courts in New Delhi. Dudhsagar Waterfalls is closed in the monsoon (June - September). Activities related to water sports are subject to weather and wind conditions on the ground. The cost of mentioned tours and transfer is not valid between 6 pm to 8 am. ₹4,940 3% OFF ₹4,798 /Adult Excluding applicable taxes PROCEED TO PAYMENT Coupons & Offers ₹ EMI No cost EMI @ ₹1,200 Book your holidays with Easy EMI options. Have a Coupon Code? Enter Code LASTMINUTE - ₹143 Coupon Applied Successfully REMOVE TRAVELMOOD - ₹85 Grab Your Discount Before It’s Gone! APPLY MMTHLD - ₹32 Grab Your Discount Before It’s Gone! APPLY SHOW LESS Best Deals For You For maximum benefits LOGIN NOW • Redeem wallet• Book faster• Get special deals• Continue in any device Customise my trip",
+              "lines": [
+                "Cancellation & Date Change Package Cancellation Policy Cancellation not possible after booking Package Date Change Policy Date Change not possible after booking Terms and Conditions Exclusions Expenses of personal nature Mentioned cost is not valid between 6 pm and 8 am Anything not mentioned under inclusions Package price does not include Gala dinner charges applicable on Christmas and New Year's Eve Terms and Conditions Standard check-in time at the hotel is normally 2:00 pm and check-out is 11:00 am. An early check-in, or a late check-out is solely based on the discretion of the hotel. A maximum of 3 adults are allowed in one room. The third occupant shall be provided a mattress/rollaway bed. The itinerary is fixed and cannot be modified. Transportation shall be provided as per the itinerary and will not be at disposal. For any paid activity which is non-operational due to any unforeseen reason, we will process refund & same should reach the guest within 30 days of processing the refund. Also, for any activity which is complimentary and not charged to MMT & guest, no refund will be processed. AC will not be functional anywhere in cool or hilly areas. Entrance fee, parking and guide charges are not included in the packages. If your flights involve a combination of different airlines, you may have to collect your luggage on arrival at the connecting hub and register it again while checking in for the onward journey to your destination. Booking rates are subject to change without prior notice. Airline seats and hotel rooms are subject to availability at the time of booking. Pricing of the booking is based on the age of the passengers. Please make sure you enter the correct age of passengers at the time of booking. Passengers furnishing incorrect age details may incur penalty at the time of travelling. In case of unavailability in the listed hotels, arrangement for an alternate accommodation will be made in a hotel of similar standard. In case your package needs to be cancelled due to any natural calamity, weather conditions etc. MakeMyTrip shall strive to give you the maximum possible refund subject to the agreement made with our trade partners/vendors. MMT reserves the right to modify the itinerary at any point, due to reasons including but not limited to: Force Majeure events, strikes, fairs, festivals, weather conditions, traffic problems, overbooking of hotels / flights, cancellation / re-routing of flights, closure of /entry restrictions at a place of visit, etc. While we will do our best to make suitable alternate arrangements, we would not be held liable for any refunds/compensation claims arising out of this. Certain hotels may ask for a security deposit during check-in, which is refundable at check-out subject to the hotel policy. The booking price does not include: Expenses of personal nature, such as laundry, telephone calls, room service, alcoholic beverages, mini bar charges, tips, portage, camera fees etc. Any other items not mentioned under Inclusions are not included in the cost of the booking. The package price does not include mandatory gala dinner charges levied by the hotels especially during New Year and Christmas or any special occasions. MakeMyTrip shall try to communicate the same while booking the package. However MakeMyTrip may not have this information readily available all the time. Cost of deviation and cost of extension of the validity on your ticket is not included. For queries regarding cancellations and refunds, please refer to our Cancellation Policy. Disputes, if any, shall be subject to the exclusive jurisdiction of the courts in New Delhi. Dudhsagar Waterfalls is closed in the monsoon (June - September). Activities related to water sports are subject to weather and wind conditions on the ground. The cost of mentioned tours and transfer is not valid between 6 pm to 8 am. ₹4,940 3% OFF ₹4,798 /Adult Excluding applicable taxes PROCEED TO PAYMENT Coupons & Offers ₹ EMI No cost EMI @ ₹1,200 Book your holidays with Easy EMI options. Have a Coupon Code? Enter Code LASTMINUTE - ₹143 Coupon Applied Successfully REMOVE TRAVELMOOD - ₹85 Grab Your Discount Before It’s Gone! APPLY MMTHLD - ₹32 Grab Your Discount Before It’s Gone! APPLY SHOW LESS Best Deals For You For maximum benefits LOGIN NOW • Redeem wallet• Book faster• Get special deals• Continue in any device Customise my trip"
+              ]
+            },
+            "summary": {
+              "text": "Airport to hotel in Goa Goa - 5 Nights Stay Day 1 Jun 25, Thu Check in to DeAmour: A Dreamy Getaway, Near Beach, 3 Star Day 2 Jun 26, Fri Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 3 Jun 27, Sat Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 4 Jun 28, Sun Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 5 Jun 29, Mon Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 6 Jun 30, Tue Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Checkout from Hotel in Goa Hotel in Goa to Airport ₹4,940 3% OFF ₹4,798 /Adult Excluding applicable taxes PROCEED TO PAYMENT Coupons & Offers ₹ EMI No cost EMI @ ₹1,200 Book your holidays with Easy EMI options. Have a Coupon Code? Enter Code LASTMINUTE - ₹143 Coupon Applied Successfully REMOVE TRAVELMOOD - ₹85 Grab Your Discount Before It’s Gone! APPLY MMTHLD - ₹32 Grab Your Discount Before It’s Gone! APPLY SHOW LESS Best Deals For You For maximum benefits LOGIN NOW • Redeem wallet• Book faster• Get special deals• Continue in any device Customise my trip",
+              "lines": [
+                "Airport to hotel in Goa Goa - 5 Nights Stay Day 1 Jun 25, Thu Check in to DeAmour: A Dreamy Getaway, Near Beach, 3 Star Day 2 Jun 26, Fri Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 3 Jun 27, Sat Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 4 Jun 28, Sun Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 5 Jun 29, Mon Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Day 6 Jun 30, Tue Day Meals: Breakfast : Included at DeAmour: A Dreamy Getaway, Near Beach , Goa Checkout from Hotel in Goa Hotel in Goa to Airport ₹4,940 3% OFF ₹4,798 /Adult Excluding applicable taxes PROCEED TO PAYMENT Coupons & Offers ₹ EMI No cost EMI @ ₹1,200 Book your holidays with Easy EMI options. Have a Coupon Code? Enter Code LASTMINUTE - ₹143 Coupon Applied Successfully REMOVE TRAVELMOOD - ₹85 Grab Your Discount Before It’s Gone! APPLY MMTHLD - ₹32 Grab Your Discount Before It’s Gone! APPLY SHOW LESS Best Deals For You For maximum benefits LOGIN NOW • Redeem wallet• Book faster• Get special deals• Continue in any device Customise my trip"
+              ]
+            }
+          },
+          "booking": {},
+          "option_label": "Default",
+          "detail_url": "https://holidayz.makemytrip.com/holidays/india/package?fromSearchWidget=true&searchDep=Goa&dest=Goa&destValue=Goa&initd=searchwidget_landing_Goa_notheme&glp=true&pdo=true&affiliate=MMT&depCity=New%20Delhi&dateSearched=22%2F06%2F2026&rooms=2%2C1%2C0%2C0%2C0%2C%2C&hotelchoice=3_3&duration=4_5&version=3&sorterPrice=1&id=37059&listingClassId=8&depDate=2026-06-25&fromCity=New%20Delhi&variantId=NO_MAJOR_COMMUTE_CCCDEC54&room=2%2C1%2C0%2C0%2C0%2C%2C&searchDate=2026-06-22&pkgType=FIT",
+          "page_title": "STARTING FROM",
+          "detail_scrape_status": "ok"
+        }
+      ],
+      "detail_scrape_status": "ok",
+      "detail_scrape_error": ""
+    }
+  ]
+}

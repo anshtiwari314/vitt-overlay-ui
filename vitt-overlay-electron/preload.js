@@ -35,6 +35,15 @@ contextBridge.exposeInMainWorld('overlay', {
     const subscription = (_event, data) => cb(data);
     ipcRenderer.on('window-resized', subscription);
     return () => ipcRenderer.removeListener('window-resized', subscription);
+  },
+  launchBrowserExtension: (url) => ipcRenderer.invoke('launch-browser-extension', url),
+  getScrapeServerInfo: () => ipcRenderer.invoke('get-scrape-server-info'),
+  scrapeStart: (job) => ipcRenderer.invoke('scrape-start', job),
+  getExtensionBridgeUrl: () => ipcRenderer.invoke('get-extension-bridge-url'),
+  onScrapeBridgeEvent: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('scrape-bridge-event', subscription);
+    return () => ipcRenderer.removeListener('scrape-bridge-event', subscription);
   }
 });
 

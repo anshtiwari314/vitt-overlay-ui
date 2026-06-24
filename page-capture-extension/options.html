@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Vitt Capture Settings</title>
+    <link rel="stylesheet" href="ui.css">
+  </head>
+  <body class="popup options">
+    <main>
+      <h1>Electron bridge</h1>
+      <label>
+        Bridge URL (Electron extensionBridge)
+        <input id="bridgeUrl" type="text" placeholder="http://127.0.0.1:38771">
+      </label>
+      <label>
+        Parallel tabs
+        <input id="concurrency" type="number" min="1" max="8" value="3">
+      </label>
+      <button id="save" type="button">Save</button>
+      <div id="status" class="status"></div>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

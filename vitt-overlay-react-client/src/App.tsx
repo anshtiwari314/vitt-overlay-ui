@@ -28,13 +28,22 @@ import {
   UploadCloud,
   X,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Chrome,
+  Globe
 } from 'lucide-react'
 import { useData } from './context/DataWrapper'
 import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
 import { useServerUrl } from './context/ServerUrlContext'
 import WindowResizeButton from './components/WindowResizeButton'
+import ScrapePanel from './components/ScrapePanel'
+import {
+  SCRAPE_EXTENSION_STATUS_EVENT,
+  SCRAPE_JOB_UPDATE_EVENT,
+  SCRAPE_LAST_EVENT,
+  SCRAPE_QUEUE_EVENT
+} from './functions/scrapeServer'
 import GMeetIcon from './assets/g-meet.png'
 import ZoomIcon from './assets/zoom.png'
 import TeamsIcon from './assets/teams.png'
@@ -1192,6 +1201,35 @@ export default function App() {
 
             window.dispatchEvent(new CustomEvent('chat-response-received'))
           }
+
+          /* --- Page scrape (additive; overlay handlers above unchanged) --- */
+          if (result.type === 'scrape_request') {
+            const job = {
+              jobId: result.jobId as string,
+              url: result.url as string,
+              scrollUntilStable: result.scrollUntilStable !== false,
+              selector: (result.selector as string | null) ?? null,
+              waitMs: (result.waitMs as number) ?? 4000,
+              status: 'queued' as const,
+              message: 'Forwarding to extension via Electron'
+            }
+            window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+              detail: {
+                jobId: job.jobId,
+                url: job.url,
+                status: 'loading',
+                message: job.message
+              }
+            }))
+            const overlay = (window as Window & {
+              overlay?: { scrapeStart?: (j: typeof job) => Promise<{ ok?: boolean }> }
+            }).overlay
+            void overlay?.scrapeStart?.(job)
+          }
+
+          if (result.type === 'job_update' && result.job && typeof result.job === 'object') {
+            window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, { detail: result.job }))
+          }
         } catch {
           /* ignore non-json */
         }
@@ -1217,6 +1255,93 @@ export default function App() {
       teardownWs()
     }
   }, [socketUrl, wsRef])
+
+  useEffect(() => {
+    const overlay = (window as unknown as {
+      overlay?: { onScrapeBridgeEvent?: (cb: (payload: unknown) => void) => () => void }
+    }).overlay
+
+    const sendOnWs = (payload: Record<string, unknown>) => {
+      const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload))
+      }
+    }
+
+    const onBridge = (payload: unknown) => {
+      const msg = payload as Record<string, unknown>
+      if (msg.type === 'job_status') {
+        sendOnWs({
+          type: 'scrape_status',
+          jobId: msg.jobId,
+          url: msg.url,
+          status: msg.status,
+          message: msg.message
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+          detail: {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: msg.status,
+            message: msg.message
+          }
+        }))
+        window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
+          detail: `${msg.status}: ${msg.url}`
+        }))
+      } else if (msg.type === 'scrape_result') {
+        sendOnWs({
+          type: 'scrape_result',
+          jobId: msg.jobId,
+          url: msg.url,
+          extractedUrl: msg.extractedUrl ?? msg.url,
+          capture: msg.capture
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
+          detail: `Extracted ${msg.url}`
+        }))
+      } else if (msg.type === 'scrape_error') {
+        sendOnWs({
+          type: 'scrape_error',
+          jobId: msg.jobId,
+          url: msg.url,
+          error: msg.error
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+          detail: {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: 'error',
+            message: msg.error,
+            error: msg.error
+          }
+        }))
+      } else if (msg.type === 'extension_status') {
+        window.dispatchEvent(new CustomEvent(SCRAPE_EXTENSION_STATUS_EVENT, {
+          detail: { connected: msg.connected }
+        }))
+      }
+    }
+
+    const onQueue = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[]; concurrency?: number }>).detail
+      if (!detail?.urls?.length) return
+      sendOnWs({
+        type: 'request_scrape',
+        urls: detail.urls,
+        scrollUntilStable: true,
+        concurrency: detail.concurrency ?? 3
+      })
+    }
+
+    const unsubBridge = overlay?.onScrapeBridgeEvent?.(onBridge)
+    window.addEventListener(SCRAPE_QUEUE_EVENT, onQueue)
+
+    return () => {
+      unsubBridge?.()
+      window.removeEventListener(SCRAPE_QUEUE_EVENT, onQueue)
+    }
+  }, [wsRef])
 
   useEffect(() => {
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
@@ -1297,6 +1422,16 @@ export default function App() {
 
   const openDashboard = () => {
     openExternal('http://vitt-health-insurance.netlify.app/')
+  }
+
+  const attachBrowserCapture = async () => {
+    handleTabSelect('scrape')
+    const overlay = (window as unknown as {
+      overlay?: { launchBrowserExtension?: (url?: string) => Promise<{ ok?: boolean; error?: string }> }
+    }).overlay
+    if (overlay?.launchBrowserExtension) {
+      await overlay.launchBrowserExtension()
+    }
   }
 
   const handleTabSelect = (tab: string) => {
@@ -1419,6 +1554,9 @@ export default function App() {
             <span>Vitt Overlay</span>
           </div>
           <div className="app4-actions no-drag">
+            <button type="button" className={`btn-icon ${selectedTab === 'scrape' ? 'active' : ''}`} onClick={() => void attachBrowserCapture()} title="Launch Chrome + Page Capture">
+              <Chrome size={18} />
+            </button>
             <button type="button" className="btn-icon" onClick={openDashboard} title="Dashboard">
               <LayoutDashboard size={18} />
             </button>
@@ -1511,7 +1649,7 @@ export default function App() {
 
         <div className="status-section no-drag" />
 
-        {selectedTab !== 'settings' && (
+        {selectedTab !== 'settings' && selectedTab !== 'scrape' && (
           <div className="controls-section no-drag">
             {sdkState.permissions_granted ? (
               <>
@@ -1566,6 +1704,7 @@ export default function App() {
               onCopy={copyToClipboard}
             />
           )}
+          {selectedTab === 'scrape' && <ScrapePanel serverConnected={isServerConnected} />}
           {selectedTab === 'settings' && (
             <SettingsTab
               transparency={transparency}
@@ -1583,6 +1722,7 @@ export default function App() {
           <TabButton active={selectedTab === 'chat'} onClick={() => handleTabSelect('chat')} icon={<BotMessageSquare size={18} />} label="AI Chat" hasUnread={unreadTabs.has('chat')} />
           <TabButton active={selectedTab === 'prompts'} onClick={() => handleTabSelect('prompts')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('prompts')} />
           <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
+          <TabButton active={selectedTab === 'scrape'} onClick={() => handleTabSelect('scrape')} icon={<Globe size={18} />} label="Scrape" />
         </div>
 
         <div className="toast-container">
