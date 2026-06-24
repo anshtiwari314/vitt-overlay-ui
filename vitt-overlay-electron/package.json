@@ -23,7 +23,8 @@
     "electron-context-menu": "^4.0.4",
     "html-react-parser": "^5.2.16",
     "imagemagick-cli": "^0.5.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
@@ -44,6 +45,10 @@
       "dist",
       "main.js",
       "preload.js",
+      "extensionBridge.js",
+      "browserCapture.js",
+      "scrapeJobMessage.js",
+      "filterScrapeData.js",
       "build",
       ".env"
     ],

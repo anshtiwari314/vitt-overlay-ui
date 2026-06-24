@@ -8,10 +8,13 @@
   </head>
   <body class="popup">
     <main>
-      <div class="brand"><span class="mark">V</span><div><strong>Vitt Capture</strong><small>Extension status</small></div></div>
-      <p id="status" class="page">Checking connection…</p>
-      <p id="queue" class="hint"></p>
-      <a class="settings" href="options.html" target="_blank">Server settings</a>
+      <div class="brand"><span class="mark">V</span><div><strong>Vitt Page Capture</strong><small>Manual + automated capture</small></div></div>
+      <p id="page" class="page">Ready to capture the current page.</p>
+      <p id="bridgeStatus" class="hint"></p>
+      <label class="check"><input id="screenshot" type="checkbox"> Include visible screenshot</label>
+      <button id="capture" type="button">Capture and send</button>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <a class="settings" href="options.html" target="_blank">Connection settings</a>
     </main>
     <script src="popup.js"></script>
   </body>

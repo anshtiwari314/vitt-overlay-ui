@@ -6,6 +6,13 @@ import {
   SCRAPE_LAST_EVENT,
   SCRAPE_QUEUE_EVENT
 } from '../functions/scrapeServer'
+import { launchBrowserMessage, launchOverlayBrowser } from '../functions/overlayBrowser'
+import { copyExtensionPath, fetchExtensionPath, revealExtensionFolder } from '../functions/extensionInstall'
+
+type OverlayApi = {
+  getExtensionBridgeStatus?: () => Promise<{ connected?: boolean }>
+  onExtensionBridgeStatus?: (cb: (data: { connected?: boolean }) => void) => () => void
+}
 
 type ScrapeMonitorState = {
   connected: boolean
@@ -13,6 +20,12 @@ type ScrapeMonitorState = {
   jobs: ScrapeJob[]
   lastEvent: string | null
   launchMessage: string | null
+  extensionPath: string | null
+  pathCopied: boolean
+}
+
+function getOverlay(): OverlayApi | undefined {
+  return (window as Window & { overlay?: OverlayApi }).overlay
 }
 
 export function useScrapeMonitor(serverConnected: boolean) {
@@ -21,12 +34,43 @@ export function useScrapeMonitor(serverConnected: boolean) {
     extensionConnected: false,
     jobs: [],
     lastEvent: null,
-    launchMessage: null
+    launchMessage: null,
+    extensionPath: null,
+    pathCopied: false
   })
+
+  useEffect(() => {
+    void fetchExtensionPath().then((p) => {
+      if (p) setState((prev) => ({ ...prev, extensionPath: p }))
+    })
+  }, [])
 
   useEffect(() => {
     setState((prev) => ({ ...prev, connected: serverConnected }))
   }, [serverConnected])
+
+  // Extension pill: fetch Electron's stored variable on load, then listen for IPC pushes.
+  useEffect(() => {
+    const overlay = getOverlay()
+    if (!overlay?.getExtensionBridgeStatus) return
+
+    const applyExtensionConnected = (connected: boolean) => {
+      setState((prev) => ({ ...prev, extensionConnected: connected }))
+      window.dispatchEvent(
+        new CustomEvent(SCRAPE_EXTENSION_STATUS_EVENT, { detail: { connected } })
+      )
+    }
+
+    void overlay.getExtensionBridgeStatus().then((status) => {
+      applyExtensionConnected(Boolean(status?.connected))
+    })
+
+    const unsubStatus = overlay.onExtensionBridgeStatus?.((data) => {
+      applyExtensionConnected(Boolean(data?.connected))
+    })
+
+    return () => unsubStatus?.()
+  }, [])
 
   useEffect(() => {
     const onJob = (event: Event) => {
@@ -41,55 +85,26 @@ export function useScrapeMonitor(serverConnected: boolean) {
       })
     }
 
-    const onExtension = (event: Event) => {
-      const connected = Boolean((event as CustomEvent<{ connected: boolean }>).detail?.connected)
-      setState((prev) => ({ ...prev, extensionConnected: connected }))
-    }
-
     const onLast = (event: Event) => {
       const text = (event as CustomEvent<string>).detail
       if (text) setState((prev) => ({ ...prev, lastEvent: text }))
     }
 
     window.addEventListener(SCRAPE_JOB_UPDATE_EVENT, onJob)
-    window.addEventListener(SCRAPE_EXTENSION_STATUS_EVENT, onExtension)
     window.addEventListener(SCRAPE_LAST_EVENT, onLast)
-
-    const overlay = (window as Window & {
-      overlay?: { onScrapeBridgeEvent?: (cb: (d: unknown) => void) => () => void }
-    }).overlay
-
-    const unsubBridge = overlay?.onScrapeBridgeEvent?.((payload: unknown) => {
-      const msg = payload as { type?: string; connected?: boolean }
-      if (msg.type === 'extension_status') {
-        window.dispatchEvent(new CustomEvent(SCRAPE_EXTENSION_STATUS_EVENT, { detail: { connected: msg.connected } }))
-      }
-    })
 
     return () => {
       window.removeEventListener(SCRAPE_JOB_UPDATE_EVENT, onJob)
-      window.removeEventListener(SCRAPE_EXTENSION_STATUS_EVENT, onExtension)
       window.removeEventListener(SCRAPE_LAST_EVENT, onLast)
-      unsubBridge?.()
     }
   }, [])
 
   const launchBrowser = useCallback(async () => {
     try {
-      const api = (window as Window & { overlay?: { launchBrowserExtension?: () => Promise<{ ok?: boolean; error?: string }> } }).overlay
-      if (!api?.launchBrowserExtension) {
-        setState((prev) => ({
-          ...prev,
-          launchMessage: 'Launch is only available in the Electron app.'
-        }))
-        return
-      }
-      const result = await api.launchBrowserExtension()
+      const result = await launchOverlayBrowser()
       setState((prev) => ({
         ...prev,
-        launchMessage: result.ok
-          ? 'Chrome opened with Vitt Page Capture extension loaded.'
-          : (result.error || 'Failed to launch Chrome')
+        launchMessage: launchBrowserMessage(result)
       }))
     } catch (e) {
       setState((prev) => ({
@@ -108,5 +123,17 @@ export function useScrapeMonitor(serverConnected: boolean) {
     }))
   }, [])
 
-  return { ...state, launchBrowser, queueUrls }
+  const copyPath = useCallback(async () => {
+    const p = await copyExtensionPath()
+    if (p) {
+      setState((prev) => ({ ...prev, extensionPath: p, pathCopied: true }))
+      window.setTimeout(() => setState((prev) => ({ ...prev, pathCopied: false })), 2000)
+    }
+  }, [])
+
+  const openExtensionFolder = useCallback(async () => {
+    await revealExtensionFolder()
+  }, [])
+
+  return { ...state, launchBrowser, queueUrls, copyPath, openExtensionFolder }
 }

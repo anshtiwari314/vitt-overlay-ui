@@ -14,6 +14,8 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useServerUrl } from '../context/ServerUrlContext'
 import WindowResizeButton from '../components/WindowResizeButton'
+import { minimizeOverlayWindow, quitOverlayWindow } from '../functions/overlayWindow'
+import { useOverlayInteraction } from '../hooks/useOverlayInteraction'
 import {
   normalizeWebSocketUrl,
   wsUrlToHttpOrigin
@@ -49,6 +51,8 @@ export default function Login3() {
   const [activeProbeUrl, setActiveProbeUrl] = useState<string>('')
   const probeRef = useRef<WebSocket | null>(null)
   const probeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useOverlayInteraction()
 
   const normalizedUrl = useMemo(() => normalizeWebSocketUrl(wsUrlDraft), [wsUrlDraft])
 
@@ -193,27 +197,13 @@ export default function Login3() {
   }
 
   const closeApp = () => {
-    const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
-    if (overlay?.quitApp) {
-      overlay.quitApp()
-      return
-    }
-    const electronAPI = (window as unknown as {
-      electronAPI?: { ipcRenderer: { send: (c: string, p: unknown) => void } }
-    }).electronAPI
-    electronAPI?.ipcRenderer?.send('close-app', undefined)
+    if (quitOverlayWindow()) return
+    setError('Close is only available in the Electron app. Run: cd vitt-overlay-electron && npm start')
   }
 
   const minimizeApp = () => {
-    const overlay = (window as unknown as { overlay?: { minimizeApp?: () => void } }).overlay
-    if (overlay?.minimizeApp) {
-      overlay.minimizeApp()
-      return
-    }
-    const electronAPI = (window as unknown as {
-      electronAPI?: { ipcRenderer: { send: (c: string, p: unknown) => void } }
-    }).electronAPI
-    electronAPI?.ipcRenderer?.send('minimize-app', undefined)
+    if (minimizeOverlayWindow()) return
+    setError('Minimize is only available in the Electron app. Run: cd vitt-overlay-electron && npm start')
   }
 
   const connStateLabel: Record<ConnState, string> = {
@@ -230,24 +220,24 @@ export default function Login3() {
   }
 
   return (
-    <div className="drag-region">
+    <div>
       <div
-        className="card app4-card drag-region"
+        className="card app4-card"
         id="card"
         data-theme="transparent"
         style={{ ['--bg-opacity' as string]: transparency / 100 }}
       >
-        <div className="app4-header drag-region">
-          <div className="app4-title">
+        <div className="app4-header">
+          <div className="app4-title drag-region">
             <span className="dot" />
             <span>Vitt Overlay</span>
           </div>
           <div className="app4-actions no-drag">
-            <button type="button" className="btn-icon" onClick={minimizeApp} title="Minimize">
+            <button type="button" className="btn-icon" onClick={minimizeApp} onMouseDown={(e) => e.stopPropagation()} title="Minimize">
               <Minus size={18} />
             </button>
             <WindowResizeButton />
-            <button type="button" className="btn-icon danger" onClick={closeApp} title="Quit">
+            <button type="button" className="btn-icon danger" onClick={closeApp} onMouseDown={(e) => e.stopPropagation()} title="Quit">
               <X size={18} />
             </button>
           </div>

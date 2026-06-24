@@ -1,10 +1,8 @@
 /**
- * Runs in the page context. Reads opts from data-vitt-scrape-opts on <html>.
- * Sets window.__vittScrapeResult when finished.
+ * Instant snapshot of the current page — no scroll, waits, or tab automation.
+ * Used for manual "Capture and send". Server-driven jobs use scrape-runner / mmt-package-scraper.
  */
-(async () => {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
+(() => {
   const parseOpts = () => {
     try {
       const raw = document.documentElement.getAttribute('data-vitt-scrape-opts') || '{}';
@@ -15,53 +13,8 @@
   };
 
   const opts = parseOpts();
-  const waitMs = opts.waitMs || 4000;
   const selector = opts.selector || null;
-  const scrollUntilStable = opts.scrollUntilStable !== false;
   const cardSelector = opts.cardSelector || '[class*="packageCard"]';
-
-  const getScrollRoot = () => {
-    if (selector) {
-      const el = document.querySelector(selector);
-      if (el) return { type: 'element', el };
-    }
-    return { type: 'window', el: null };
-  };
-
-  const getScrollHeight = (root) => {
-    if (root.type === 'element') return root.el.scrollHeight;
-    return Math.max(document.body?.scrollHeight || 0, document.documentElement.scrollHeight || 0);
-  };
-
-  const scrollToBottom = (root) => {
-    if (root.type === 'element') {
-      root.el.scrollTop = root.el.scrollHeight;
-    } else {
-      window.scrollTo(0, getScrollHeight(root));
-    }
-  };
-
-  const countCards = () => document.querySelectorAll(cardSelector).length;
-
-  if (scrollUntilStable) {
-    const root = getScrollRoot();
-    let noGrowth = 0;
-    let rounds = 0;
-    const maxRounds = 25;
-
-    while (rounds < maxRounds && noGrowth < 2) {
-      const heightBefore = getScrollHeight(root);
-      const cardsBefore = countCards();
-      scrollToBottom(root);
-      await sleep(waitMs);
-      const heightAfter = getScrollHeight(root);
-      const cardsAfter = countCards();
-      const grew = heightAfter > heightBefore || cardsAfter > cardsBefore;
-      if (grew) noGrowth = 0;
-      else noGrowth += 1;
-      rounds += 1;
-    }
-  }
 
   const absoluteUrl = (value) => {
     try {
@@ -122,7 +75,8 @@
 
   window.__vittScrapeResult = {
     schemaVersion: 2,
-    pageType: opts.scrapeMode || 'mmt-listing',
+    pageType: opts.scrapeMode || 'manual',
+    captureMode: 'immediate',
     capturedAt: new Date().toISOString(),
     url: location.href,
     extractedUrl: location.href,
@@ -130,13 +84,13 @@
     title: document.title,
     language: document.documentElement.lang || null,
     selector: selector || null,
-    scrollUntilStable,
+    scrollUntilStable: false,
     metadata,
     text: rootEl === document.documentElement ? (document.body?.innerText || '') : (rootEl.innerText || ''),
     html: selector ? clone.outerHTML : `<!DOCTYPE ${document.doctype?.name || 'html'}>\n${clone.outerHTML}`,
     links,
     images,
-    cardCount: countCards(),
+    cardCount: document.querySelectorAll(cardSelector).length,
     resourceUrls: performance.getEntriesByType('resource').map((e) => e.name).slice(0, 20000)
   };
 

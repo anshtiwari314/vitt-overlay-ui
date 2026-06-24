@@ -1,0 +1,44 @@
+/** Detect MMT page type from URL. */
+export function detectScrapeMode(url) {
+  const u = String(url || '');
+  if (/\/holidays\/india\/package\b/i.test(u)) return 'mmt-package';
+  if (/\/holidays\/india\/search\b/i.test(u)) return 'mmt-listing';
+  return 'generic';
+}
+
+/** Default extract flags per page type. */
+export function defaultExtractOptions(mode) {
+  if (mode === 'mmt-package') {
+    return {
+      scrapeMode: 'mmt-package',
+      scrollUntilStable: false,
+      waitMs: 2500,
+      extractItinerary: true,
+      extractPolicies: true,
+      extractSummary: true,
+      extractHotels: true,
+      extractActivities: true,
+      extractTransfers: true,
+      maxSidebarClicks: 8
+    };
+  }
+  if (mode === 'mmt-listing') {
+    return {
+      scrapeMode: 'mmt-listing',
+      scrollUntilStable: true,
+      waitMs: 4000,
+      extractItinerary: false,
+      extractPolicies: false,
+      extractSummary: false,
+      extractHotels: false,
+      extractActivities: false,
+      extractTransfers: false
+    };
+  }
+  return { scrapeMode: 'generic', scrollUntilStable: true, waitMs: 4000 };
+}
+
+export function mergeJobOptions(url, overrides = {}) {
+  const mode = overrides.scrapeMode || detectScrapeMode(url);
+  return { ...defaultExtractOptions(mode), ...overrides, scrapeMode: mode };
+}

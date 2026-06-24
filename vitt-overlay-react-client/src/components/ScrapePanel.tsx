@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CheckCircle2, Chrome, Globe, Loader2, AlertCircle, Link2 } from 'lucide-react'
+import { CheckCircle2, Chrome, Globe, Loader2, AlertCircle, Link2, Copy, FolderOpen } from 'lucide-react'
 import { useScrapeMonitor } from '../hooks/useScrapeMonitor'
 import type { ScrapeJob } from '../functions/scrapeServer'
+import { LAUNCH_CHROME_CAVEAT, MANUAL_EXTENSION_STEPS } from '../functions/extensionInstall'
 
 function statusIcon(status: ScrapeJob['status']) {
   if (status === 'done') return <CheckCircle2 size={14} className="scrape-status-icon done" />
@@ -24,8 +25,21 @@ function statusLabel(status: ScrapeJob['status']) {
 }
 
 export default function ScrapePanel({ serverConnected }: { serverConnected: boolean }) {
-  const { connected, extensionConnected, jobs, lastEvent, launchMessage, launchBrowser, queueUrls } = useScrapeMonitor(serverConnected)
+  const {
+    connected,
+    extensionConnected,
+    jobs,
+    lastEvent,
+    launchMessage,
+    extensionPath,
+    pathCopied,
+    launchBrowser,
+    queueUrls,
+    copyPath,
+    openExtensionFolder
+  } = useScrapeMonitor(serverConnected)
   const [urlInput, setUrlInput] = useState('')
+  const [showManual, setShowManual] = useState(true)
 
   const handleQueue = () => {
     const urls = urlInput.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -38,14 +52,49 @@ export default function ScrapePanel({ serverConnected }: { serverConnected: bool
       <div className="scrape-toolbar">
         <button type="button" className="btn-primary scrape-launch-btn" onClick={() => void launchBrowser()}>
           <Chrome size={16} />
-          Launch Chrome + Extension
+          Launch Chrome
         </button>
+        <p className="scrape-hint warn">{LAUNCH_CHROME_CAVEAT}</p>
         <div className="scrape-status-row">
           <span className={`scrape-pill ${connected ? 'ok' : 'bad'}`}>Server {connected ? 'on' : 'off'}</span>
           <span className={`scrape-pill ${extensionConnected ? 'ok' : 'bad'}`}>Extension {extensionConnected ? 'on' : 'off'}</span>
         </div>
-        {launchMessage ? <div className="scrape-hint">{launchMessage}</div> : null}
+        {launchMessage ? (
+          <div className={`scrape-hint ${launchMessage.includes('Failed') || launchMessage.includes('only available') ? 'error' : ''}`}>
+            {launchMessage}
+          </div>
+        ) : null}
         {lastEvent ? <div className="scrape-hint">Latest: {lastEvent}</div> : null}
+      </div>
+
+      <div className="scrape-manual-box">
+        <button type="button" className="scrape-manual-toggle" onClick={() => setShowManual((v) => !v)}>
+          Manual install in your signed-in Chrome (recommended)
+        </button>
+        {showManual ? (
+          <div className="scrape-manual-body">
+            <ol className="scrape-manual-steps">
+              {MANUAL_EXTENSION_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {extensionPath ? (
+              <code className="scrape-path" title={extensionPath}>{extensionPath}</code>
+            ) : (
+              <p className="scrape-hint">Extension path available when running in Electron.</p>
+            )}
+            <div className="scrape-manual-actions">
+              <button type="button" className="btn-secondary scrape-mini-btn" onClick={() => void copyPath()} disabled={!extensionPath}>
+                <Copy size={14} />
+                {pathCopied ? 'Copied!' : 'Copy folder path'}
+              </button>
+              <button type="button" className="btn-secondary scrape-mini-btn" onClick={() => void openExtensionFolder()} disabled={!extensionPath}>
+                <FolderOpen size={14} />
+                Open folder
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="scrape-queue-form">
@@ -68,7 +117,7 @@ export default function ScrapePanel({ serverConnected }: { serverConnected: bool
       <div className="scrape-jobs">
         <div className="scrape-jobs-title">Live extraction flow</div>
         {jobs.length === 0 ? (
-          <div className="scrape-empty">No jobs yet. Launch Chrome, connect the extension, then queue URLs from here or your backend.</div>
+          <div className="scrape-empty">No jobs yet. Install the extension in your Chrome, then queue URLs from here.</div>
         ) : (
           jobs.map((job) => (
             <div key={job.jobId} className={`scrape-job-card status-${job.status}`}>

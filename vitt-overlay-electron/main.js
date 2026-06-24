@@ -29,10 +29,13 @@ import { launchChromeWithExtension, getExtensionPath } from './browserCapture.js
 import {
   startExtensionBridge,
   enqueueExtensionJob,
+  sendExtensionCommand,
   setExtensionBridgeListener,
+  setExtensionConnectionChangeListener,
   getExtensionBridgeUrl,
-  isExtensionBridgeConnected
+  getExtensionConnected
 } from './extensionBridge.js';
+import { filterScrapeData } from './filterScrapeData.js';
 
 // Right-click context menu (cut/copy/paste/select-all) for any editable
 // field in any renderer. Without this, macOS users cannot right-click→Paste
@@ -48,10 +51,167 @@ contextMenu({
 
 let win;
 let tray;
-let isClickThrough = true;
+let isClickThrough = false;
 
 /** Active detected meetings. Source of truth for renderer UI. */
 let detectedMeetings = [];
+
+/** SDK/recording state forwarded to the renderer. */
+let state = {
+  bot_id: null,
+  recording: false,
+  transcript: null,
+  video_url: null,
+  permissions_granted: true,
+  meetings: []
+};
+
+function registerIpcHandlers() {
+  ipcMain.on('close-app', () => {
+    app.quit();
+  });
+
+  ipcMain.on('minimize-app', () => {
+    if (win) win.minimize();
+  });
+
+  ipcMain.on('overlay-set-mouse-ignore', (_event, ignore) => {
+    if (!win) return;
+    if (!isClickThrough) {
+      applyMousePassthrough(false);
+      return;
+    }
+    applyMousePassthrough(Boolean(ignore));
+  });
+
+  ipcMain.on('open-external', (_event, url) => {
+    shell.openExternal(url);
+  });
+
+  // --- Window resize & emulated fullscreen ---
+  let preFullscreenBounds = null;
+
+  ipcMain.on('resize-window', (_event, payload) => {
+    try {
+      if (!win) return;
+      const { widthPct, heightPct, width, height } = payload || {};
+      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+      const { x: ax, y: ay, width: aw, height: ah } = display.workArea;
+
+      let w, h;
+      if (typeof width === 'number' && typeof height === 'number') {
+        w = width;
+        h = height;
+      } else if (typeof widthPct === 'number' && typeof heightPct === 'number') {
+        w = Math.round(aw * widthPct);
+        h = Math.round(ah * heightPct);
+      } else {
+        return;
+      }
+
+      const x = Math.round(ax + (aw - w) / 2);
+      const y = Math.round(ay + (ah - h) / 2);
+      win.setBounds({ x, y, width: w, height: h });
+      preFullscreenBounds = null;
+    } catch (e) {
+      console.error('ipcMain: resize-window error', e);
+    }
+  });
+
+  ipcMain.on('toggle-fullscreen', () => {
+    try {
+      if (!win) return;
+      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+      const wa = display.workArea;
+      const cur = win.getBounds();
+      const isFull =
+        preFullscreenBounds != null &&
+        cur.x === wa.x && cur.y === wa.y && cur.width === wa.width && cur.height === wa.height;
+      if (isFull) {
+        win.setBounds(preFullscreenBounds);
+        preFullscreenBounds = null;
+      } else {
+        preFullscreenBounds = cur;
+        win.setBounds({ x: wa.x, y: wa.y, width: wa.width, height: wa.height });
+      }
+    } catch (e) {
+      console.error('ipcMain: toggle-fullscreen error', e);
+    }
+  });
+
+  ipcMain.handle('get-window-size', () => {
+    if (!win) return null;
+    const { width, height } = win.getBounds();
+    return { width, height };
+  });
+
+  ipcMain.handle('launch-browser-extension', async (_event, url) => {
+    try {
+      const result = await launchChromeWithExtension({ url: typeof url === 'string' ? url : undefined });
+      return { ok: true, ...result, bridgeUrl: getExtensionBridgeUrl() };
+    } catch (e) {
+      console.error('launch-browser-extension', e);
+      return { ok: false, error: e.message || String(e) };
+    }
+  });
+
+  ipcMain.handle('scrape-start', (_event, job) => {
+    if (!job?.jobId || !job?.url) {
+      return { ok: false, error: 'Invalid scrape job' };
+    }
+    console.log(`[scrape] react → electron: job ${job.jobId} ${job.url}`);
+    enqueueExtensionJob(job);
+    return { ok: true };
+  });
+
+  ipcMain.handle('get-extension-bridge-url', () => getExtensionBridgeUrl());
+
+  ipcMain.handle('get-extension-bridge-status', () => ({
+    connected: getExtensionConnected()
+  }));
+
+  ipcMain.handle('extension-send-command', (_event, payload) => {
+    return sendExtensionCommand(payload);
+  });
+
+  ipcMain.handle('get-extension-path', () => ({
+    path: getExtensionPath(),
+    exists: fs.existsSync(path.join(getExtensionPath(), 'manifest.json'))
+  }));
+
+  ipcMain.handle('reveal-extension-folder', () => {
+    const extensionPath = getExtensionPath();
+    if (!fs.existsSync(extensionPath)) {
+      return { ok: false, error: `Extension folder not found: ${extensionPath}` };
+    }
+    shell.showItemInFolder(path.join(extensionPath, 'manifest.json'));
+    return { ok: true, path: extensionPath };
+  });
+
+  ipcMain.handle('get-scrape-server-info', () => ({
+    httpBase: process.env.VITT_PORT ? `http://127.0.0.1:${process.env.VITT_PORT}` : 'http://127.0.0.1:5000',
+    wsUrl: process.env.VITT_PORT ? `ws://127.0.0.1:${process.env.VITT_PORT}/ws` : 'ws://127.0.0.1:5000/ws',
+    extensionPath: getExtensionPath(),
+    bridgeUrl: getExtensionBridgeUrl()
+  }));
+
+  ipcMain.on('message-from-renderer', async (_event, arg) => {
+    console.log('message-from-renderer', arg);
+    if (!arg || !arg.command) return;
+    switch (arg.command) {
+      case 'renderer-ready':
+        console.log('Renderer is ready, sending initial state');
+        sendState();
+        sendDetectedMeetingsState();
+        pushExtensionBridgeStatusToRenderer();
+        break;
+      case 'reupload':
+      case 'start-recording':
+      case 'stop-recording':
+        break;
+    }
+  });
+}
 
 function sendScrapeBridgeEvent(payload) {
   try {
@@ -63,11 +223,13 @@ function sendScrapeBridgeEvent(payload) {
   }
 }
 
-function notifyExtensionStatus() {
-  sendScrapeBridgeEvent({
-    type: 'extension_status',
-    connected: isExtensionBridgeConnected()
-  });
+function pushExtensionBridgeStatusToRenderer() {
+  try {
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+    win.webContents.send('extension-bridge-status', { connected: getExtensionConnected() });
+  } catch (e) {
+    console.error('pushExtensionBridgeStatusToRenderer', e);
+  }
 }
 
 function sendDetectedMeetingsState() {
@@ -163,13 +325,24 @@ function createWindow() {
 
   nativeTheme.themeSource = 'dark';
 
+  applyMousePassthrough(isClickThrough);
+
   console.log('=== Initial state:', state);
+}
+
+function applyMousePassthrough(ignore) {
+  if (!win) return;
+  try {
+    win.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
+  } catch (e) {
+    console.error('applyMousePassthrough', e);
+  }
 }
 
 function toggleClickThrough() {
   isClickThrough = !isClickThrough;
   if (win) {
-    win.setIgnoreMouseEvents(isClickThrough, { forward: true });
+    applyMousePassthrough(isClickThrough);
     win.webContents.send('overlay:clickThrough', isClickThrough);
   }
 }
@@ -269,12 +442,24 @@ app.setAppUserModelId('com.VittAi.overlay');
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 
+  registerIpcHandlers();
+
   startExtensionBridge();
+  setExtensionConnectionChangeListener(() => {
+    pushExtensionBridgeStatusToRenderer();
+  });
   setExtensionBridgeListener((payload) => {
-    sendScrapeBridgeEvent(payload);
-    if (payload.type === 'extension_status' || payload.type === 'job_status') {
-      notifyExtensionStatus();
+    if (payload.type === 'scrape_result') {
+      const via = payload.source === 'extension-popup' ? 'manual popup' : 'automated';
+      console.log(`[scrape] extension → electron: result (${via}) ${payload.jobId} ${payload.url}`);
+    } else if (payload.type === 'job_status') {
+      console.log(`[scrape] extension → electron: ${payload.status} ${payload.jobId}`);
+    } else if (payload.type === 'scrape_error') {
+      console.log(`[scrape] extension → electron: error ${payload.jobId} ${payload.error}`);
     }
+
+    //let filteredData filterScrapeData(payload)
+    sendScrapeBridgeEvent(payload);
   });
 
   createWindow();
@@ -290,123 +475,6 @@ app.whenReady().then(() => {
 
   app.on('window-all-closed', () => {
     // Keep app alive like standard tray apps.
-  });
-
-  ipcMain.on('close-app', () => {
-    app.quit();
-  });
-
-  ipcMain.on('minimize-app', () => {
-    if (win) win.minimize();
-  });
-
-  ipcMain.on('open-external', (_event, url) => {
-    shell.openExternal(url);
-  });
-
-  // --- Window resize & emulated fullscreen ---
-  // The overlay window is created with frame:false, transparent:true and
-  // fullscreenable:false, so OS-level fullscreen is blocked. We emulate it by
-  // resizing the window to fill the display work area, and remember the prior
-  // bounds so toggling restores them.
-  let preFullscreenBounds = null;
-
-  ipcMain.on('resize-window', (_event, payload) => {
-    try {
-      if (!win) return;
-      const { widthPct, heightPct, width, height } = payload || {};
-      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
-      const { x: ax, y: ay, width: aw, height: ah } = display.workArea;
-
-      let w, h;
-      if (typeof width === 'number' && typeof height === 'number') {
-        w = width;
-        h = height;
-      } else if (typeof widthPct === 'number' && typeof heightPct === 'number') {
-        w = Math.round(aw * widthPct);
-        h = Math.round(ah * heightPct);
-      } else {
-        return;
-      }
-
-      const x = Math.round(ax + (aw - w) / 2);
-      const y = Math.round(ay + (ah - h) / 2);
-      win.setBounds({ x, y, width: w, height: h });
-      preFullscreenBounds = null;
-    } catch (e) {
-      console.error('ipcMain: resize-window error', e);
-    }
-  });
-
-  ipcMain.on('toggle-fullscreen', () => {
-    try {
-      if (!win) return;
-      const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
-      const wa = display.workArea;
-      const cur = win.getBounds();
-      const isFull =
-        preFullscreenBounds != null &&
-        cur.x === wa.x && cur.y === wa.y && cur.width === wa.width && cur.height === wa.height;
-      if (isFull) {
-        win.setBounds(preFullscreenBounds);
-        preFullscreenBounds = null;
-      } else {
-        preFullscreenBounds = cur;
-        win.setBounds({ x: wa.x, y: wa.y, width: wa.width, height: wa.height });
-      }
-    } catch (e) {
-      console.error('ipcMain: toggle-fullscreen error', e);
-    }
-  });
-
-  ipcMain.handle('get-window-size', () => {
-    if (!win) return null;
-    const { width, height } = win.getBounds();
-    return { width, height };
-  });
-
-  ipcMain.handle('launch-browser-extension', (_event, url) => {
-    try {
-      const result = launchChromeWithExtension({ url: typeof url === 'string' ? url : undefined });
-      return { ok: true, ...result, bridgeUrl: getExtensionBridgeUrl() };
-    } catch (e) {
-      console.error('launch-browser-extension', e);
-      return { ok: false, error: e.message || String(e) };
-    }
-  });
-
-  ipcMain.handle('scrape-start', (_event, job) => {
-    if (!job?.jobId || !job?.url) {
-      return { ok: false, error: 'Invalid scrape job' };
-    }
-    enqueueExtensionJob(job);
-    notifyExtensionStatus();
-    return { ok: true };
-  });
-
-  ipcMain.handle('get-extension-bridge-url', () => getExtensionBridgeUrl());
-
-  ipcMain.handle('get-scrape-server-info', () => ({
-    httpBase: process.env.VITT_PORT ? `http://127.0.0.1:${process.env.VITT_PORT}` : 'http://127.0.0.1:5000',
-    wsUrl: process.env.VITT_PORT ? `ws://127.0.0.1:${process.env.VITT_PORT}/ws` : 'ws://127.0.0.1:5000/ws',
-    extensionPath: getExtensionPath(),
-    bridgeUrl: getExtensionBridgeUrl()
-  }));
-
-  ipcMain.on('message-from-renderer', async (_event, arg) => {
-    console.log('message-from-renderer', arg);
-    if (!arg || !arg.command) return;
-    switch (arg.command) {
-      case 'renderer-ready':
-        console.log('Renderer is ready, sending initial state');
-        sendState();
-        sendDetectedMeetingsState();
-        break;
-      case 'reupload':
-      case 'start-recording':
-      case 'stop-recording':
-        break;
-    }
   });
 });
 

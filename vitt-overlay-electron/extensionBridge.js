@@ -1,6 +1,7 @@
-import http from 'node:http';
+import { WebSocketServer, WebSocket } from 'ws';
+import { scrapeJobMessage } from './scrapeJobMessage.js';
 
-const BRIDGE_PORT = Number(process.env.VITT_EXTENSION_BRIDGE_PORT || 38771);
+const BRIDGE_WS_PORT = Number(process.env.VITT_EXTENSION_BRIDGE_WS_PORT || 38772);
 const BRIDGE_HOST = process.env.VITT_EXTENSION_BRIDGE_HOST || '127.0.0.1';
 
 /** @type {((payload: object) => void) | null} */
@@ -9,26 +10,60 @@ let onExtensionEvent = null;
 /** @type {Array<object>} */
 const pendingForExtension = [];
 
-/** @type {boolean} */
+/** @type {import('ws').WebSocket | null} */
+let extensionSocket = null;
+
+/** @type {WebSocketServer | null} */
+let wss = null;
+
+/** @type {ReturnType<typeof setInterval> | null} */
+let pingInterval = null;
+
+/** Source of truth: is the Chrome extension connected to this bridge? */
 let extensionConnected = false;
 
-function json(res, status, body) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
-  res.end(JSON.stringify(body));
+/** @type {((connected: boolean) => void) | null} */
+let onConnectionChange = null;
+
+export function getExtensionConnected() {
+  return extensionConnected;
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
-  });
+export function setExtensionConnectionChangeListener(listener) {
+  onConnectionChange = listener;
+}
+
+function setExtensionConnected(connected) {
+  const next = Boolean(connected);
+  if (extensionConnected === next) return;
+  extensionConnected = next;
+  console.log('extension bridge connected:', next);
+  onConnectionChange?.(extensionConnected);
+}
+
+function sendToExtension(payload) {
+  if (!extensionSocket || extensionSocket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+  try {
+    extensionSocket.send(JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    console.error('sendToExtension', e);
+    return false;
+  }
+}
+
+function flushPendingJobs() {
+  if (!extensionSocket || extensionSocket.readyState !== WebSocket.OPEN) return;
+  while (pendingForExtension.length > 0) {
+    const job = pendingForExtension.shift();
+    const sent = sendToExtension(scrapeJobMessage(job));
+    if (!sent) {
+      pendingForExtension.unshift(job);
+      break;
+    }
+  }
 }
 
 export function setExtensionBridgeListener(listener) {
@@ -36,72 +71,104 @@ export function setExtensionBridgeListener(listener) {
 }
 
 export function enqueueExtensionJob(job) {
-  pendingForExtension.push(job);
+  const sent = sendToExtension(scrapeJobMessage(job));
+  if (!sent) {
+    pendingForExtension.push(job);
+  }
+}
+
+/** Push any JSON command to the extension (bidirectional). */
+export function sendExtensionCommand(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { ok: false, error: 'Invalid payload' };
+  }
+  const sent = sendToExtension(payload);
+  if (!sent) {
+    return { ok: false, error: 'Extension not connected' };
+  }
+  return { ok: true };
 }
 
 export function isExtensionBridgeConnected() {
-  return extensionConnected;
+  return extensionSocket != null && extensionSocket.readyState === WebSocket.OPEN;
 }
 
-/** @type {import('node:http').Server | null} */
-let server = null;
-
 export function startExtensionBridge() {
-  if (server) return server;
+  if (wss) return wss;
 
-  server = http.createServer(async (req, res) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  wss = new WebSocketServer({ host: BRIDGE_HOST, port: BRIDGE_WS_PORT });
 
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      });
-      res.end();
+  wss.on('connection', (ws, req) => {
+    const remote = req.socket.remoteAddress;
+    if (remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
+      console.warn('Extension bridge rejected non-local connection from', remote);
+      ws.close(1008, 'Local connections only');
       return;
     }
 
-    if (url.pathname === '/extension/health' && req.method === 'GET') {
-      json(res, 200, { ok: true, connected: extensionConnected, pending: pendingForExtension.length });
-      return;
-    }
-
-    if (url.pathname === '/extension/ping' && req.method === 'POST') {
-      extensionConnected = true;
-      json(res, 200, { ok: true });
-      return;
-    }
-
-    if (url.pathname === '/extension/poll' && req.method === 'GET') {
-      extensionConnected = true;
-      const jobs = pendingForExtension.splice(0, pendingForExtension.length);
-      json(res, 200, { jobs, concurrency: 3 });
-      return;
-    }
-
-    if (url.pathname === '/extension/event' && req.method === 'POST') {
-      extensionConnected = true;
+    if (extensionSocket && extensionSocket.readyState === WebSocket.OPEN) {
       try {
-        const body = JSON.parse(await readBody(req) || '{}');
-        onExtensionEvent?.(body);
-        json(res, 200, { ok: true });
-      } catch (e) {
-        json(res, 400, { ok: false, error: e.message });
+        extensionSocket.close(1000, 'Replaced by new connection');
+      } catch {
+        /* ignore */
       }
-      return;
     }
 
-    json(res, 404, { error: 'Not found' });
+    extensionSocket = ws;
+    console.log('Extension connected via WebSocket');
+    setExtensionConnected(true);
+    flushPendingJobs();
+
+    ws.on('message', (raw) => {
+      try {
+        const body = JSON.parse(String(raw));
+        if (body.type === 'pong' || body.type === 'extension_ping') return;
+        if (body.type === 'extension_ready') {
+          setExtensionConnected(true);
+          flushPendingJobs();
+          return;
+        }
+        onExtensionEvent?.(body);
+      } catch (e) {
+        console.error('extensionBridge ws message', e);
+      }
+    });
+
+    ws.on('close', (code, reason) => {
+      if (extensionSocket === ws) {
+        extensionSocket = null;
+        console.log('Extension WebSocket disconnected', code, reason?.toString?.() || '');
+        setExtensionConnected(false);
+      }
+    });
+
+    ws.on('error', (err) => {
+      console.error('extensionBridge ws client error', err);
+    });
   });
 
-  server.listen(BRIDGE_PORT, BRIDGE_HOST, () => {
-    console.log(`Extension bridge http://${BRIDGE_HOST}:${BRIDGE_PORT}`);
+  wss.on('listening', () => {
+    console.log(`Extension bridge ws://${BRIDGE_HOST}:${BRIDGE_WS_PORT}`);
   });
 
-  return server;
+  wss.on('error', (err) => {
+    console.error('extensionBridge wss error', err);
+  });
+
+  pingInterval = setInterval(() => {
+    if (extensionSocket?.readyState === WebSocket.OPEN) {
+      sendToExtension({ type: 'ping' });
+    }
+  }, 20000);
+  if (pingInterval.unref) pingInterval.unref();
+
+  return wss;
 }
 
 export function getExtensionBridgeUrl() {
-  return `http://${BRIDGE_HOST}:${BRIDGE_PORT}`;
+  return `ws://${BRIDGE_HOST}:${BRIDGE_WS_PORT}`;
+}
+
+export function getExtensionBridgeWsPort() {
+  return BRIDGE_WS_PORT;
 }
