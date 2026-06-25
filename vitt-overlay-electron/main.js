@@ -457,8 +457,7 @@ app.whenReady().then(() => {
     } else if (payload.type === 'scrape_error') {
       console.log(`[scrape] extension → electron: error ${payload.jobId} ${payload.error}`);
     }
-
-    //let filteredData filterScrapeData(payload)
+    //filterScrapeData(payload)
     sendScrapeBridgeEvent(payload);
   });
 

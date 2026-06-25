@@ -6,6 +6,7 @@ dist-mac/
 dist/*
 dist-mac/*
 build/
+capture/
 *.txt
 .claude
 vitt-overlay-electron/**/*.md

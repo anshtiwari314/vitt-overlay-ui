@@ -43,6 +43,126 @@
 
   const countCards = () => document.querySelectorAll(cardSelector).length;
 
+  const urlFromString = (value) => {
+    if (!value) return '';
+    const m = String(value).match(
+      /(https?:\/\/[^\s"'<>]+?\/holidays\/[^\s"'<>]*package[^\s"'<>]*|\/holidays\/[^\s"'<>]*package[^\s"'<>]*)/i
+    );
+    return m ? absoluteUrl(m[1]) : '';
+  };
+
+  const packageUrlFromElement = (el) => {
+    if (!el) return '';
+
+    const anchor = el.closest('a[href]') || el.querySelector('a[href]');
+    if (anchor?.href && /\/package/i.test(anchor.href)) {
+      return absoluteUrl(anchor.href);
+    }
+
+    for (const attr of el.attributes || []) {
+      const fromAttr = urlFromString(attr.value);
+      if (fromAttr) return fromAttr;
+    }
+
+    const onclick = el.getAttribute('onclick') || el.getAttribute('ng-click') || '';
+    const fromClick = urlFromString(onclick);
+    if (fromClick) return fromClick;
+
+    const card =
+      el.closest('[class*="packageCard"]') ||
+      el.closest('[class*="listingCard"]') ||
+      el.closest('[class*="package-card"]');
+    if (card) {
+      const cardLink = card.querySelector('a[href*="/package"]');
+      if (cardLink?.href) return absoluteUrl(cardLink.href);
+    }
+
+    return '';
+  };
+
+  const textLines = (el) =>
+    (el?.innerText || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+  const extractListingPackages = () => {
+    const cards = document.querySelectorAll(cardSelector);
+    const packages = [];
+    const seen = new Set();
+
+    for (const card of cards) {
+      const head =
+        card.querySelector('.packageHead[title]') ||
+        card.querySelector('[class*="packageHead"][title]') ||
+        card.querySelector('.packageHead') ||
+        card.querySelector('[class*="packageHead"]');
+      const name = (head?.getAttribute('title') || head?.textContent || '').trim();
+      const duration = (
+        card.querySelector('.packageHead + span.selected')?.textContent ||
+        card.querySelector('.selected')?.textContent ||
+        card.querySelector('[class*="duration"]')?.textContent ||
+        ''
+      ).trim();
+
+      const priceBox = card.querySelector('.includeWrapper, [class*="includeWrapper"]');
+      const priceSource = priceBox?.innerText || card.innerText || '';
+      const priceMatch = priceSource.match(/₹([\d,]+)\s*\/Person/i) || priceSource.match(/₹([\d,]+)/);
+      const price = priceMatch ? `₹${priceMatch[1]}` : '';
+
+      const variantEls = card.querySelectorAll(
+        '.variant-card-container.pointer, .variant-card-container, [class*="variant-card-container"]'
+      );
+
+      let detail_url = '';
+      const package_options = [];
+
+      for (const [index, variant] of variantEls.entries()) {
+        const option_url = packageUrlFromElement(variant);
+        const preview = textLines(variant).slice(0, 3).join(' ').slice(0, 120);
+        if (option_url) {
+          package_options.push({
+            option_label: preview || `Option ${index + 1}`,
+            detail_url: option_url
+          });
+          if (!detail_url) detail_url = option_url;
+        }
+      }
+
+      if (!detail_url) {
+        detail_url = packageUrlFromElement(priceBox) || packageUrlFromElement(card);
+      }
+
+      const features = [];
+      for (const li of card.querySelectorAll('.tripListWrapper li, .visitListWrapper li, [class*="tripList"] li')) {
+        const line = (li.innerText || '').trim();
+        if (line && line.length < 60) features.push(line);
+      }
+
+      const duration_details = [];
+      for (const span of card.querySelectorAll('.itineraryList span, [class*="itineraryList"] span')) {
+        const line = (span.innerText || '').trim();
+        if (line) duration_details.push(line);
+      }
+
+      const key = `${name}|${duration}`;
+      if (!name || name.length < 3 || seen.has(key)) continue;
+      seen.add(key);
+
+      packages.push({
+        name,
+        duration,
+        duration_details: duration_details.slice(0, 6),
+        features: features.slice(0, 12),
+        price,
+        detail_url,
+        package_options
+      });
+    }
+
+    return packages;
+  };
+
   if (scrollUntilStable) {
     const root = getScrollRoot();
     let noGrowth = 0;
@@ -120,6 +240,11 @@
     height: img.naturalHeight
   })).slice(0, 10000);
 
+  const listingPackages =
+    (opts.scrapeMode === 'mmt-listing' || /\/holidays\/india\/search\b/i.test(location.pathname))
+      ? extractListingPackages()
+      : [];
+
   window.__vittScrapeResult = {
     schemaVersion: 2,
     pageType: opts.scrapeMode || 'mmt-listing',
@@ -137,6 +262,7 @@
     links,
     images,
     cardCount: countCards(),
+    listingPackages,
     resourceUrls: performance.getEntriesByType('resource').map((e) => e.name).slice(0, 20000)
   };
 

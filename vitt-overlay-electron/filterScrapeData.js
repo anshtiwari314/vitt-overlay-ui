@@ -247,64 +247,193 @@ function parseSidebarItem(item = {}) {
   };
 }
 
-function parseListingBlock(block = '') {
-  const lines = splitLines(block);
-  if (!lines.length) return null;
+const LISTING_NAME_SKIP =
+  /^(Popular|Sorted By|\(\d+\)|ALL PACKAGES|HONEYMOON|NORTH GOA|SOUTH GOA|BEACH|HOTEL|VILLAS|LAST MINUTE|PREMIUM|Recently Viewed|Previous|Next|Explore|FILTERS|₹|No Cost EMI|Buy Now|SHOW PACKAGES|Book @)/i;
 
-  const durIdx = lines.findIndex((line) => /^\d+N\/\d+D$/i.test(line));
-  if (durIdx < 1) return null;
-
-  let nameIdx = durIdx - 1;
-  while (
-    nameIdx > 0 &&
-    /^(Popular|Sorted By|\(\d+\)|ALL PACKAGES|HONEYMOON|NORTH GOA|SOUTH GOA|BEACH|HOTEL|VILLAS|LAST MINUTE|PREMIUM|₹)/i.test(
-      lines[nameIdx]
-    )
-  ) {
-    nameIdx -= 1;
-  }
-
-  const name = lines[nameIdx];
-  if (!name || name.length < 4) return null;
-
-  const duration = lines[durIdx].toUpperCase();
-  const features = [];
-  let price = '';
-
-  for (let j = durIdx + 1; j < lines.length; j += 1) {
-    const line = lines[j];
-    if (/^\d+N\/\d+D$/i.test(line)) break;
-    if (/More Options Available/i.test(line)) break;
-
-    const perPerson = line.match(/₹([\d,]+)\s*\/Person/i);
-    if (perPerson) price = `₹${perPerson[1]}`;
-
-    if (/Book this|paying only/i.test(line)) continue;
-    if (/Total Price/i.test(line)) {
-      const total = line.match(/₹([\d,]+)/);
-      if (total && !price) price = `₹${total[1]}`;
-      continue;
-    }
-    if (!/₹/.test(line) && line.length <= 50) features.push(line);
-  }
-
-  const durationDetails = features.filter((line) => /^\d+N\s/i.test(line));
-  const featureList = features.filter((line) => !/^\d+N\s/i.test(line));
-
-  return {
-    name,
-    duration,
-    duration_details: durationDetails,
-    features: featureList.slice(0, 12),
-    price,
-    detail_url: ''
-  };
+function decodeHtmlEntities(text = '') {
+  return String(text)
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
 }
 
-export function filterListingCapture(capture = {}, url = '') {
-  const destination = extractDestination(url) || 'Unknown';
-  let region = capture.text || '';
+function stripHtmlTags(html = '') {
+  return decodeHtmlEntities(String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
 
+function listingPackageKey(name, duration) {
+  return `${name.trim().toLowerCase()}|${duration.trim().toUpperCase()}`;
+}
+
+function pushListingPackage(packages, seen, pkg) {
+  if (!pkg?.name || pkg.name.length < 3) return;
+  const key = listingPackageKey(pkg.name, pkg.duration || '');
+  const existingIdx = packages.findIndex((p) => listingPackageKey(p.name, p.duration || '') === key);
+  if (existingIdx >= 0) {
+    const existing = packages[existingIdx];
+    if (!existing.detail_url && pkg.detail_url) existing.detail_url = pkg.detail_url;
+    if ((!existing.package_options || !existing.package_options.length) && pkg.package_options?.length) {
+      existing.package_options = pkg.package_options;
+    }
+    if (!existing.price && pkg.price) existing.price = pkg.price;
+    return;
+  }
+  if (seen.has(key)) return;
+  seen.add(key);
+  packages.push(pkg);
+}
+
+/** Parse MMT listing cards from captured HTML (packageHead + card structure). */
+function parseListingFromHtml(html = '') {
+  if (!html || !/packageHead/i.test(html)) return [];
+
+  const packages = [];
+  const seen = new Set();
+  const headRe =
+    /title="([^"]*)"[^>]*class="packageHead"[^>]*>([^<]*)<\/p>\s*<span class="selected">([^<]*)<\/span>/gi;
+
+  let match;
+  while ((match = headRe.exec(html)) !== null) {
+    const name = decodeHtmlEntities((match[1] || match[2] || '').trim());
+    const duration = (match[3] || '').trim().toUpperCase();
+    if (!name || name.length < 3) continue;
+
+    const start = match.index;
+    const nextHead = html.indexOf('class="packageHead"', start + 1);
+    const chunk = html.slice(start, nextHead > start ? nextHead : start + 3000);
+
+    const duration_details = [];
+    const itineraryHtml = chunk.match(/class="itineraryList"[^>]*>([\s\S]*?)<\/div>/i);
+    if (itineraryHtml) {
+      for (const span of itineraryHtml[1].matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)) {
+        const line = stripHtmlTags(span[1]);
+        if (line) duration_details.push(line);
+      }
+    }
+
+    const features = [];
+    const tripList = chunk.match(/class="tripListWrapper"[^>]*>([\s\S]*?)<\/ul>/i);
+    if (tripList) {
+      for (const item of tripList[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)) {
+        const line = stripHtmlTags(item[1]);
+        if (line) features.push(line);
+      }
+    }
+
+    const visitList = chunk.match(/class="visitListWrapper"[^>]*>([\s\S]*?)<\/ul>/i);
+    if (visitList) {
+      for (const item of visitList[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)) {
+        const line = stripHtmlTags(item[1]);
+        if (line && !features.includes(line)) features.push(line);
+      }
+    }
+
+    const priceMatch = chunk.match(/class="priceStyle">₹([\d,]+)/i);
+    const price = priceMatch ? `₹${priceMatch[1]}` : '';
+
+    const hrefMatches = [...chunk.matchAll(/href="([^"]*\/holidays\/[^"]*package[^"]*)"/gi)];
+    const detail_url = hrefMatches[0] ? decodeHtmlEntities(hrefMatches[0][1]) : '';
+
+    const package_options = [];
+    const variantChunks = chunk.split(/class="[^"]*variant-card-container/i).slice(1);
+    for (const [index, variantChunk] of variantChunks.entries()) {
+      const variantHref = variantChunk.match(/href="([^"]*\/holidays\/[^"]*package[^"]*)"/i);
+      if (!variantHref) continue;
+      package_options.push({
+        option_label: `Option ${index + 1}`,
+        detail_url: decodeHtmlEntities(variantHref[1])
+      });
+    }
+
+    pushListingPackage(packages, seen, {
+      name,
+      duration,
+      duration_details: duration_details.slice(0, 5),
+      features: features.slice(0, 12),
+      price,
+      detail_url: detail_url || package_options[0]?.detail_url || '',
+      package_options
+    });
+  }
+
+  return packages;
+}
+
+/** Fallback: extract every package in a text block (not just the first). */
+function parseListingBlocksFromText(block = '') {
+  const lines = splitLines(block);
+  if (!lines.length) return [];
+
+  const durIndices = lines.reduce((acc, line, i) => {
+    if (/^\d+N\/\d+D$/i.test(line)) acc.push(i);
+    return acc;
+  }, []);
+
+  if (!durIndices.length) return [];
+
+  const packages = [];
+
+  for (let n = 0; n < durIndices.length; n += 1) {
+    const durIdx = durIndices[n];
+    const prevDurIdx = n > 0 ? durIndices[n - 1] : -1;
+
+    let nameIdx = durIdx - 1;
+    while (
+      nameIdx > prevDurIdx &&
+      (LISTING_NAME_SKIP.test(lines[nameIdx]) ||
+        /More Options Available/i.test(lines[nameIdx]) ||
+        /^\d+N\/\d+D$/i.test(lines[nameIdx]))
+    ) {
+      nameIdx -= 1;
+    }
+
+    const name = lines[nameIdx];
+    if (!name || name.length < 4) continue;
+
+    const duration = lines[durIdx].toUpperCase();
+    const features = [];
+    let price = '';
+    const nextDurIdx = n + 1 < durIndices.length ? durIndices[n + 1] : lines.length;
+
+    for (let j = durIdx + 1; j < nextDurIdx; j += 1) {
+      const line = lines[j];
+      if (/More Options Available/i.test(line)) break;
+
+      const perPerson = line.match(/₹([\d,]+)\s*\/Person/i);
+      if (perPerson) price = `₹${perPerson[1]}`;
+
+      if (/Book this|paying only|SHOW PACKAGES/i.test(line)) continue;
+      if (/Total Price/i.test(line)) {
+        const total = line.match(/₹([\d,]+)/);
+        if (total && !price) price = `₹${total[1]}`;
+        continue;
+      }
+      if (!/₹/.test(line) && line.length <= 50 && !LISTING_NAME_SKIP.test(line)) {
+        features.push(line);
+      }
+    }
+
+    const durationDetails = features.filter((line) => /^\d+N\s/i.test(line));
+    const featureList = features.filter((line) => !/^\d+N\s/i.test(line));
+
+    packages.push({
+      name,
+      duration,
+      duration_details: durationDetails,
+      features: featureList.slice(0, 12),
+      price,
+      detail_url: ''
+    });
+  }
+
+  return packages;
+}
+
+function parseListingFromText(text = '') {
+  let region = text || '';
   const sortedIdx = region.indexOf('Sorted By:');
   if (sortedIdx >= 0) region = region.slice(sortedIdx);
 
@@ -316,12 +445,44 @@ export function filterListingCapture(capture = {}, url = '') {
   const seen = new Set();
 
   for (const block of blocks) {
-    const pkg = parseListingBlock(block.trim());
-    if (!pkg) continue;
-    const key = `${pkg.name}|${pkg.duration}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    packages.push(pkg);
+    for (const pkg of parseListingBlocksFromText(block.trim())) {
+      pushListingPackage(packages, seen, pkg);
+    }
+  }
+
+  // Cards without a preceding "More Options" marker (e.g. paired rows).
+  for (const pkg of parseListingBlocksFromText(region)) {
+    pushListingPackage(packages, seen, pkg);
+  }
+
+  return packages;
+}
+
+export function filterListingCapture(capture = {}, url = '') {
+  const destination = extractDestination(url) || 'Unknown';
+  const packages = [];
+  const seen = new Set();
+
+  for (const pkg of capture.listingPackages || []) {
+    pushListingPackage(packages, seen, {
+      name: pkg.name || '',
+      duration: pkg.duration || '',
+      duration_details: pkg.duration_details || [],
+      features: pkg.features || [],
+      price: pkg.price || '',
+      detail_url: pkg.detail_url || '',
+      package_options: pkg.package_options || []
+    });
+  }
+
+  const fromHtml = parseListingFromHtml(capture.html || '');
+  for (const pkg of fromHtml) {
+    pushListingPackage(packages, seen, pkg);
+  }
+
+  // Supplement with text parsing (covers gaps when HTML is partial or card markup changes).
+  for (const pkg of parseListingFromText(capture.text || '')) {
+    pushListingPackage(packages, seen, pkg);
   }
 
   return { [destination]: packages };

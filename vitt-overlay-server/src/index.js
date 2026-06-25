@@ -21,7 +21,7 @@ const PACKAGE_SCRAPE_URL =
   process.env.VITT_PACKAGE_SCRAPE_URL ||
   'https://holidayz.makemytrip.com/holidays/india/package?depCity=New%20Delhi&dateSearched=02%2F07%2F2026&dest=Goa&destValue=Goa&glp=true&pdo=true&affiliate=MMT&rooms=2%2C0%2C0%2C0%2C%2C%2C&id=21828&listingClassId=12&depDate=2026-07-02&fromCity=New%20Delhi&variantId=NO_MAJOR_COMMUTE_CCCDEC54&room=2%2C0%2C0%2C0%2C%2C%2C&searchDate=2026-07-02&pkgType=FIT';
 
-const SCRAPE_EVERY_MS = Number(process.env.VITT_SCHEDULED_SCRAPE_INTERVAL_MS || 1 * 30 * 1000);
+const SCRAPE_EVERY_MS = Number(process.env.VITT_SCHEDULED_SCRAPE_INTERVAL_MS || 2 * 60 * 1000);
 
 /** Default package extract flags (override per request). */
 const PACKAGE_EXTRACT_DEFAULTS = {
