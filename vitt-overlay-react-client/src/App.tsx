@@ -1221,6 +1221,9 @@ export default function App() {
               selector: (result.selector as string | null) ?? null,
               waitMs: (result.waitMs as number) ?? 4000,
               scrapeMode: (result.scrapeMode as string) ?? undefined,
+              extractWithFlight: result.extractWithFlight as boolean | undefined,
+              extractWithoutFlight: result.extractWithoutFlight as boolean | undefined,
+              searchPackageName: (result.searchPackageName as string) ?? undefined,
               extractItinerary: result.extractItinerary as boolean | undefined,
               extractPolicies: result.extractPolicies as boolean | undefined,
               extractSummary: result.extractSummary as boolean | undefined,
@@ -1316,6 +1319,19 @@ export default function App() {
       overlay?: { onScrapeBridgeEvent?: (cb: (payload: unknown) => void) => () => void }
     }).overlay
 
+    const scrapeWsContext = () => ({
+      source: currentUserRef.current?.source ?? '',
+      userid:
+        currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+      sessionid: sessionuidRef.current ?? '',
+      roomId:
+        activeMeetingIdRef.current ??
+        meetingsRef.current[0]?.id ??
+        currentUserRef.current?.userid ??
+        currentUserRef.current?.id ??
+        ''
+    })
+
     const sendOnWs = (payload: Record<string, unknown>) => {
       const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
       if (ws?.readyState === WebSocket.OPEN) {
@@ -1327,11 +1343,14 @@ export default function App() {
       const msg = payload as Record<string, unknown>
       if (msg.type === 'job_status') {
         sendOnWs({
-          type: 'scrape_status',
-          jobId: msg.jobId,
-          url: msg.url,
-          status: msg.status,
-          message: msg.message
+          route_type: 'scrape_status',
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: msg.status,
+            message: msg.message
+          }
         })
         window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
           detail: {
@@ -1347,13 +1366,16 @@ export default function App() {
       } else if (msg.type === 'scrape_result') {
         sendOnWs({
           type: 'scrape_result',
-          jobId: msg.jobId,
-          url: msg.url,
-          extractedUrl: msg.extractedUrl ?? msg.url,
-          source: msg.source,
-          pageType: msg.pageType,
-          filtered: msg.filtered,
-          capture: msg.capture
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            pageType: msg.pageType,
+            url: msg.url,
+            extractedUrl: msg.extractedUrl ?? msg.url,
+            source: msg.source,
+            filtered: msg.filtered,
+            capture: msg.capture
+          }
         })
         window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
           detail: msg.source === 'extension-popup'
@@ -1362,10 +1384,13 @@ export default function App() {
         }))
       } else if (msg.type === 'scrape_error') {
         sendOnWs({
-          type: 'scrape_error',
-          jobId: msg.jobId,
-          url: msg.url,
-          error: msg.error
+          route_type: 'scrape_error',
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            url: msg.url,
+            error: msg.error
+          }
         })
         window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
           detail: {
@@ -1383,10 +1408,13 @@ export default function App() {
       const detail = (event as CustomEvent<{ urls: string[]; concurrency?: number }>).detail
       if (!detail?.urls?.length) return
       sendOnWs({
-        type: 'request_scrape',
-        urls: detail.urls,
-        scrollUntilStable: true,
-        concurrency: detail.concurrency ?? 3
+        route_type: 'request_scrape',
+        ...scrapeWsContext(),
+        'scrape-data': {
+          urls: detail.urls,
+          scrollUntilStable: true,
+          concurrency: detail.concurrency ?? 3
+        }
       })
     }
 

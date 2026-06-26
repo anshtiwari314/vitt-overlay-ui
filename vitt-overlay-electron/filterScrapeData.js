@@ -576,7 +576,11 @@ export function filterScrapeData(payload) {
   try {
     if (pageType === 'mmt-package') {
       filtered = filterPackageCapture(capture, url);
-    } else if (pageType === 'mmt-listing') {
+    } else if (
+      pageType === 'mmt-listing' ||
+      pageType === 'mmt-listing-urls' ||
+      pageType === 'mmt-listing-search'
+    ) {
       filtered = filterListingCapture(capture, url);
     }
   } catch (error) {

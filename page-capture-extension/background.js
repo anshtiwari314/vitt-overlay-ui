@@ -173,7 +173,31 @@ function handleBridgeMessage(msg) {
 
 
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+const pendingInterceptors = new Map();
+
+function deliverInterceptResult(openerTabId, url, reason) {
+  chrome.tabs.sendMessage(openerTabId, { channel: 'intercept_result', url: url || null, reason }).catch(() => {});
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.channel === 'intercept_next_tab') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      pendingInterceptors.set(tabId, {
+        timeout: setTimeout(() => {
+          if (pendingInterceptors.has(tabId)) {
+            pendingInterceptors.delete(tabId);
+            deliverInterceptResult(tabId, null, 'timeout');
+          }
+        }, msg.timeout || 3000)
+      });
+      sendResponse({ ready: true });
+      return false;
+    }
+    sendResponse({ ready: false, reason: 'no-tab' });
+    return false;
+  }
+
   if (msg?.channel === 'manual_capture') {
     void runManualCaptureOnTab(msg.tabId, { includeScreenshot: Boolean(msg.includeScreenshot) })
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -194,6 +218,40 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 
+
+chrome.tabs.onCreated.addListener((tab) => {
+  const openerId = tab.openerTabId;
+  if (openerId && pendingInterceptors.has(openerId)) {
+    const interceptor = pendingInterceptors.get(openerId);
+    pendingInterceptors.delete(openerId);
+    clearTimeout(interceptor.timeout);
+
+    const finish = (url) => {
+      deliverInterceptResult(openerId, url, url ? 'ok' : 'empty');
+      chrome.tabs.remove(tab.id).catch(() => {});
+    };
+
+    const u = tab.pendingUrl || tab.url;
+    if (u && u !== 'about:blank' && !u.startsWith('chrome://')) {
+      finish(u);
+    } else {
+      const listener = (tabId, info, updatedTab) => {
+        if (tabId === tab.id) {
+          const url = info.url || updatedTab.url || updatedTab.pendingUrl;
+          if (url && url !== 'about:blank' && !url.startsWith('chrome://')) {
+            chrome.tabs.onUpdated.removeListener(listener);
+            finish(url);
+          }
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        finish(null);
+      }, 3000);
+    }
+  }
+});
 
 function waitForTabLoad(tabId, timeoutMs = 45000, onProgress) {
 
@@ -336,7 +394,7 @@ function buildScrapeOpts(job) {
   const isPackage =
     job.scrapeMode === 'mmt-package' || /\/holidays\/india\/package\b/i.test(url);
   const isListing =
-    job.scrapeMode === 'mmt-listing' || /\/holidays\/india\/search\b/i.test(url);
+    job.scrapeMode === 'mmt-listing' || job.scrapeMode === 'mmt-listing-urls' || job.scrapeMode === 'mmt-listing-search' || /\/holidays\/india\/search\b/i.test(url);
 
   if (isPackage) {
     return {
@@ -355,11 +413,14 @@ function buildScrapeOpts(job) {
   }
 
   return {
-    scrapeMode: isListing ? 'mmt-listing' : 'generic',
+    scrapeMode: isListing ? (job.scrapeMode || 'mmt-listing') : 'generic',
     waitMs: job.waitMs ?? 4000,
     selector: job.selector || null,
     scrollUntilStable: job.scrollUntilStable !== false,
-    cardSelector: job.cardSelector || '[class*="packageCard"]'
+    cardSelector: job.cardSelector || '[class*="packageCard"]',
+    extractWithFlight: job.extractWithFlight !== false,
+    extractWithoutFlight: job.extractWithoutFlight !== false,
+    searchPackageName: job.searchPackageName || ''
   };
 }
 
@@ -530,7 +591,7 @@ async function runScrapeJob(job) {
 
     const scrapeOptsPreview = buildScrapeOpts(job);
 
-    const loadTimeout = scrapeOptsPreview.scrapeMode === 'mmt-package' ? 90000 : 45000;
+    const loadTimeout = (scrapeOptsPreview.scrapeMode === 'mmt-package' || scrapeOptsPreview.scrapeMode === 'mmt-listing-urls' || scrapeOptsPreview.scrapeMode === 'mmt-listing-search') ? 180000 : 45000;
 
     const loadResult = await waitForTabLoad(tabId, loadTimeout, (message) => {
 

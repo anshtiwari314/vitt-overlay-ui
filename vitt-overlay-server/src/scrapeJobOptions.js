@@ -22,6 +22,16 @@ export function defaultExtractOptions(mode) {
       maxSidebarClicks: 8
     };
   }
+  if (mode === 'mmt-listing-urls' || mode === 'mmt-listing-search') {
+    return {
+      scrapeMode: mode,
+      scrollUntilStable: true,
+      waitMs: 3000,
+      extractWithFlight: true,
+      extractWithoutFlight: true,
+      searchPackageName: ''
+    };
+  }
   if (mode === 'mmt-listing') {
     return {
       scrapeMode: 'mmt-listing',

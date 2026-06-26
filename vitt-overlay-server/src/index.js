@@ -21,6 +21,27 @@ const PACKAGE_SCRAPE_URL =
   process.env.VITT_PACKAGE_SCRAPE_URL ||
   'https://holidayz.makemytrip.com/holidays/india/package?depCity=New%20Delhi&dateSearched=02%2F07%2F2026&dest=Goa&destValue=Goa&glp=true&pdo=true&affiliate=MMT&rooms=2%2C0%2C0%2C0%2C%2C%2C&id=21828&listingClassId=12&depDate=2026-07-02&fromCity=New%20Delhi&variantId=NO_MAJOR_COMMUTE_CCCDEC54&room=2%2C0%2C0%2C0%2C%2C%2C&searchDate=2026-07-02&pkgType=FIT';
 
+/** Type 2 — listing + click-through detail URLs (uncomment in runScheduledScrapes to test). */
+const TYPE2_LISTING_URLS = {
+  scrapeMode: 'mmt-listing-urls',
+  url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
+  extractWithFlight: true,
+  extractWithoutFlight: true,
+  scrollUntilStable: true,
+  waitMs: 3000
+};
+
+/** Type 3 — find one package on listing + its detail URL(s) (uncomment in runScheduledScrapes to test). */
+const TYPE3_LISTING_SEARCH = {
+  scrapeMode: 'mmt-listing-search',
+  url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Kolkata',
+  searchPackageName: 'kolkata 2 nightful joy journey',
+  extractWithFlight: true,
+  extractWithoutFlight: false,
+  scrollUntilStable: true,
+  waitMs: 3000
+};
+
 const SCRAPE_EVERY_MS = Number(process.env.VITT_SCHEDULED_SCRAPE_INTERVAL_MS || 2 * 60 * 1000);
 
 /** Default package extract flags (override per request). */
@@ -93,28 +114,38 @@ function sendScrapeRequest(url, options = {}) {
   return jobId;
 }
 
-function onWsMessage(ws, msg) {
-  if (!msg?.type) return;
+/** Scrape payload from React WS message (nested scrape-data or legacy flat). */
+function scrapeDataFromMessage(msg) {
+  return msg?.['scrape-data'] || msg?.scrapeData || msg;
+}
 
-  switch (msg.type) {
+function onWsMessage(ws, msg) {
+  const routeType = msg?.route_type || msg?.type;
+  if (!routeType) return;
+
+  switch (routeType) {
     case 'client-init':
       wsSend(ws, { type: 'client-init-ack', ok: true, jobs: [] });
       break;
 
     case 'request_scrape': {
-      const urls = msg.urls || (msg.url ? [msg.url] : []);
+      const scrapeData = scrapeDataFromMessage(msg);
+      const urls = scrapeData.urls || (scrapeData.url ? [scrapeData.url] : msg.urls || (msg.url ? [msg.url] : []));
       const baseOpts = {
-        scrollUntilStable: msg.scrollUntilStable,
-        selector: msg.selector,
-        waitMs: msg.waitMs,
-        scrapeMode: msg.scrapeMode,
-        extractItinerary: msg.extractItinerary,
-        extractPolicies: msg.extractPolicies,
-        extractSummary: msg.extractSummary,
-        extractHotels: msg.extractHotels,
-        extractActivities: msg.extractActivities,
-        extractTransfers: msg.extractTransfers,
-        maxSidebarClicks: msg.maxSidebarClicks
+        scrollUntilStable: scrapeData.scrollUntilStable ?? msg.scrollUntilStable,
+        selector: scrapeData.selector ?? msg.selector,
+        waitMs: scrapeData.waitMs ?? msg.waitMs,
+        scrapeMode: scrapeData.scrapeMode ?? msg.scrapeMode,
+        extractWithFlight: scrapeData.extractWithFlight ?? msg.extractWithFlight,
+        extractWithoutFlight: scrapeData.extractWithoutFlight ?? msg.extractWithoutFlight,
+        searchPackageName: scrapeData.searchPackageName ?? msg.searchPackageName,
+        extractItinerary: scrapeData.extractItinerary ?? msg.extractItinerary,
+        extractPolicies: scrapeData.extractPolicies ?? msg.extractPolicies,
+        extractSummary: scrapeData.extractSummary ?? msg.extractSummary,
+        extractHotels: scrapeData.extractHotels ?? msg.extractHotels,
+        extractActivities: scrapeData.extractActivities ?? msg.extractActivities,
+        extractTransfers: scrapeData.extractTransfers ?? msg.extractTransfers,
+        maxSidebarClicks: scrapeData.maxSidebarClicks ?? msg.maxSidebarClicks
       };
       for (const raw of urls) {
         const url = String(raw || '').trim();
@@ -123,45 +154,66 @@ function onWsMessage(ws, msg) {
       break;
     }
 
-    case 'scrape_status':
-      if (jobs.has(msg.jobId)) {
-        jobs.get(msg.jobId).status = msg.status;
+    case 'scrape_status': {
+      const scrapeData = scrapeDataFromMessage(msg);
+      const jobId = scrapeData.jobId ?? msg.jobId;
+      const url = scrapeData.url ?? msg.url;
+      if (jobs.has(jobId)) {
+        jobs.get(jobId).status = scrapeData.status ?? msg.status;
       }
       broadcast({
         type: 'job_update',
         job: {
-          jobId: msg.jobId,
-          url: msg.url,
-          status: msg.status,
-          message: msg.message || ''
+          jobId,
+          url,
+          status: scrapeData.status ?? msg.status,
+          message: scrapeData.message ?? msg.message ?? ''
         }
-      });
-      break;
-
-    case 'scrape_result': {
-      const pageType = msg.pageType || msg.capture?.pageType || detectScrapeMode(msg.url);
-      saveJsonToCapture({
-        jobId: msg.jobId,
-        source: msg.source || 'automated',
-        pageType,
-        url: jobs.get(msg.jobId)?.url || msg.url,
-        extractedUrl: msg.extractedUrl || msg.url,
-        filtered: msg.filtered || null,
-        capture: msg.capture
-      });
-      broadcast({
-        type: 'job_update',
-        job: { jobId: msg.jobId, url: msg.url, status: 'done', hasCapture: true, pageType }
       });
       break;
     }
 
-    case 'scrape_error':
+    case 'scrape_result': {
+      const scrapeData = scrapeDataFromMessage(msg);
+      const jobId = scrapeData.jobId ?? msg.jobId;
+      const url = scrapeData.url ?? msg.url;
+      const extractedUrl = scrapeData.extractedUrl ?? msg.extractedUrl ?? url;
+      const capture = scrapeData.capture ?? msg.capture;
+      const pageType =
+        scrapeData.pageType || capture?.pageType || detectScrapeMode(url);
+      saveJsonToCapture({
+        userid: msg.userid || null,
+        sessionid: msg.sessionid || null,
+        roomId: msg.roomId || null,
+        clientSource: msg.source || null,
+        'scrape-data': {
+          jobId,
+          source: scrapeData.source || capture?.source || 'automated',
+          pageType,
+          url: jobs.get(jobId)?.url || url,
+          extractedUrl,
+          filtered: scrapeData.filtered ?? msg.filtered ?? null,
+          capture
+        }
+      });
       broadcast({
         type: 'job_update',
-        job: { jobId: msg.jobId, url: msg.url, status: 'error', error: msg.error }
+        job: { jobId, url, status: 'done', hasCapture: true, pageType }
       });
       break;
+    }
+
+    case 'scrape_error': {
+      const scrapeData = scrapeDataFromMessage(msg);
+      const jobId = scrapeData.jobId ?? msg.jobId;
+      const url = scrapeData.url ?? msg.url;
+      const error = scrapeData.error ?? msg.error;
+      broadcast({
+        type: 'job_update',
+        job: { jobId, url, status: 'error', error }
+      });
+      break;
+    }
 
     case 'chat-with-ai':
       wsSend(ws, {
@@ -239,6 +291,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // --- REST test shortcuts (uncomment one route to fire on GET, e.g. curl http://127.0.0.1:5000/api/scrape/test-type2) ---
+  // if (url.pathname === '/api/scrape/test-type2' && req.method === 'GET') {
+  //   const jobId = sendScrapeRequest(TYPE2_LISTING_URLS.url, TYPE2_LISTING_URLS);
+  //   json(202, { ok: true, jobIds: [jobId], mode: 'mmt-listing-urls' });
+  //   return;
+  // }
+  // if (url.pathname === '/api/scrape/test-type3' && req.method === 'GET') {
+  //   const jobId = sendScrapeRequest(TYPE3_LISTING_SEARCH.url, TYPE3_LISTING_SEARCH);
+  //   json(202, { ok: true, jobIds: [jobId], mode: 'mmt-listing-search' });
+  //   return;
+  // }
+
   if (url.pathname === '/login-post' && req.method === 'POST') {
     json(200, { ok: true, token: 'local-dev-token' });
     return;
@@ -277,8 +341,16 @@ function runScheduledScrapes() {
     console.log('timer: no client connected, skip');
     return;
   }
-  sendScrapeRequest(LISTING_SCRAPE_URL, { scrapeMode: 'mmt-listing' });
-  sendScrapeRequest(PACKAGE_SCRAPE_URL, { scrapeMode: 'mmt-package', ...PACKAGE_EXTRACT_DEFAULTS });
+
+  // --- Type 1 + Type 4 (default timer) — commented out while testing Type 2 / 3 ---
+  // sendScrapeRequest(LISTING_SCRAPE_URL, { scrapeMode: 'mmt-listing' });
+  // sendScrapeRequest(PACKAGE_SCRAPE_URL, { scrapeMode: 'mmt-package', ...PACKAGE_EXTRACT_DEFAULTS });
+
+  // --- Type 2: listing + package detail URLs ---
+  sendScrapeRequest(TYPE2_LISTING_URLS.url, TYPE2_LISTING_URLS);
+
+  // --- Type 3: search one package on listing (uncomment to test instead of Type 2) ---
+  // sendScrapeRequest(TYPE3_LISTING_SEARCH.url, TYPE3_LISTING_SEARCH);
 }
 
 setInterval(runScheduledScrapes, SCRAPE_EVERY_MS);

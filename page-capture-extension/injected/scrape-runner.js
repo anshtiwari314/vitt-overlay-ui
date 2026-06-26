@@ -163,6 +163,141 @@
     return packages;
   };
 
+  const closeModals = async () => {
+    const modalCloser = document.querySelector('._Modal.modalCont .close.closeIcon, .close.closeIcon');
+    if (modalCloser) {
+      modalCloser.click();
+      await sleep(500);
+    }
+  };
+
+  const interceptTabUrl = async (el, timeoutMs = 2000) => {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (url) => {
+        if (settled) return;
+        settled = true;
+        chrome.runtime.onMessage.removeListener(onResult);
+        resolve(url || null);
+      };
+
+      const onResult = (msg) => {
+        if (msg?.channel === 'intercept_result') finish(msg.url);
+      };
+      chrome.runtime.onMessage.addListener(onResult);
+
+      chrome.runtime.sendMessage({ channel: 'intercept_next_tab', timeout: timeoutMs }, (res) => {
+        if (chrome.runtime.lastError || !res?.ready) {
+          finish(null);
+          return;
+        }
+        el.scrollIntoView({ block: 'center' });
+        el.click();
+        setTimeout(() => finish(null), timeoutMs + 500);
+      });
+    });
+  };
+
+  const processVisibleCards = async (packages, seen) => {
+    const cards = document.querySelectorAll(cardSelector);
+    for (const card of cards) {
+      if (card.dataset.vittResolved === 'true') continue;
+
+      const nameEl = card.querySelector('.packageHead[title], [class*="packageHead"]');
+      const name = (nameEl?.getAttribute('title') || nameEl?.textContent || '').trim();
+      const duration = (card.querySelector('.selected')?.textContent || card.querySelector('[class*="duration"]')?.textContent || '').trim();
+      if (!name || name.length < 3) continue;
+
+      // Type 3: Search package match
+      if (opts.scrapeMode === 'mmt-listing-search' && opts.searchPackageName) {
+        const searchWords = opts.searchPackageName.toLowerCase().split(/\s+/).filter(Boolean);
+        const nameLower = name.toLowerCase();
+        const matches = searchWords.every(w => nameLower.includes(w));
+        if (!matches) {
+          card.dataset.vittResolved = 'true';
+          continue;
+        }
+      }
+
+      await closeModals();
+
+      const priceBox = card.querySelector('.includeWrapper, [class*="includeWrapper"]');
+      if (!priceBox) continue;
+
+      card.dataset.vittResolved = 'true';
+
+      let detail_url = '';
+      const package_options = [];
+
+      // Try capturing tab directly from price box (No variant scenario)
+      const urlFromPrice = await interceptTabUrl(priceBox, 1500);
+      if (urlFromPrice) {
+        detail_url = urlFromPrice;
+      } else {
+        await sleep(600); // Give modal time to appear
+        const variantEls = document.querySelectorAll('.variant-card-container.pointer, .variant-card-container');
+        const activeVariants = variantEls.length > 0 ? variantEls : card.querySelectorAll('.variant-card-container');
+
+        for (const [index, variant] of activeVariants.entries()) {
+          const variantText = (variant.innerText || '').toLowerCase();
+          const isSoldOut = variantText.includes('sold out');
+          const isWithFlight = variantText.includes('with flight');
+          const isWithoutFlight = variantText.includes('without flight');
+
+          if (isWithFlight && opts.extractWithFlight === false) continue;
+          if (isWithoutFlight && opts.extractWithoutFlight === false) continue;
+
+          let vUrl = '';
+          if (!isSoldOut) {
+            vUrl = await interceptTabUrl(variant, 2500);
+          }
+
+          package_options.push({
+            option_label: (variant.innerText || '').split('\n').join(' ').slice(0, 100),
+            detail_url: vUrl,
+            status: isSoldOut ? 'sold out' : (vUrl ? 'ok' : 'failed')
+          });
+
+          if (vUrl && !detail_url) detail_url = vUrl;
+        }
+      }
+
+      await closeModals();
+
+      const key = `${name}|${duration}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const priceSource = priceBox.innerText || card.innerText || '';
+        const priceMatch = priceSource.match(/₹([\d,]+)\s*\/Person/i) || priceSource.match(/₹([\d,]+)/);
+        const price = priceMatch ? `₹${priceMatch[1]}` : '';
+
+        const features = [];
+        for (const li of card.querySelectorAll('.tripListWrapper li, .visitListWrapper li, [class*="tripList"] li')) {
+          const line = (li.innerText || '').trim();
+          if (line && line.length < 60) features.push(line);
+        }
+
+        const duration_details = [];
+        for (const span of card.querySelectorAll('.itineraryList span, [class*="itineraryList"] span')) {
+          const line = (span.innerText || '').trim();
+          if (line) duration_details.push(line);
+        }
+
+        packages.push({
+          name, duration, duration_details: duration_details.slice(0, 6), features: features.slice(0, 12), price, detail_url, package_options
+        });
+      }
+
+      if (opts.scrapeMode === 'mmt-listing-search') {
+        return true; // Found and resolved target package
+      }
+    }
+    return false;
+  };
+
+  const dynamicPackages = [];
+  const dynamicSeen = new Set();
+
   if (scrollUntilStable) {
     const root = getScrollRoot();
     let noGrowth = 0;
@@ -170,6 +305,11 @@
     const maxRounds = 25;
 
     while (rounds < maxRounds && noGrowth < 2) {
+      if (opts.scrapeMode === 'mmt-listing-urls' || opts.scrapeMode === 'mmt-listing-search') {
+        const found = await processVisibleCards(dynamicPackages, dynamicSeen);
+        if (found && opts.scrapeMode === 'mmt-listing-search') break;
+      }
+
       const heightBefore = getScrollHeight(root);
       const cardsBefore = countCards();
       scrollToBottom(root);
@@ -241,9 +381,11 @@
   })).slice(0, 10000);
 
   const listingPackages =
-    (opts.scrapeMode === 'mmt-listing' || /\/holidays\/india\/search\b/i.test(location.pathname))
-      ? extractListingPackages()
-      : [];
+    (opts.scrapeMode === 'mmt-listing-urls' || opts.scrapeMode === 'mmt-listing-search')
+      ? dynamicPackages
+      : (opts.scrapeMode === 'mmt-listing' || /\/holidays\/india\/search\b/i.test(location.pathname))
+        ? extractListingPackages()
+        : [];
 
   window.__vittScrapeResult = {
     schemaVersion: 2,
