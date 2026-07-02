@@ -17,6 +17,11 @@ export function scrapeJobMessage(job) {
     extractActivities: job.extractActivities,
     extractTransfers: job.extractTransfers,
     maxSidebarClicks: job.maxSidebarClicks,
-    cardSelector: job.cardSelector || null
+    cardSelector: job.cardSelector || null,
+    extractAllListingTabs: job.extractAllListingTabs === true,
+    listingTabName: job.listingTabName || null,
+    extractPackageDetail: job.extractPackageDetail === true,
+    packageDetailWaitMs: job.packageDetailWaitMs ?? null,
+    minPackageCards: job.minPackageCards ?? 4
   };
 }

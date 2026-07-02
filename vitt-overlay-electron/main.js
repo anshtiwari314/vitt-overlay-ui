@@ -35,7 +35,6 @@ import {
   getExtensionBridgeUrl,
   getExtensionConnected
 } from './extensionBridge.js';
-import { filterScrapeData } from './filterScrapeData.js';
 
 // Right-click context menu (cut/copy/paste/select-all) for any editable
 // field in any renderer. Without this, macOS users cannot right-click→Paste
@@ -451,13 +450,23 @@ app.whenReady().then(() => {
   setExtensionBridgeListener((payload) => {
     if (payload.type === 'scrape_result') {
       const via = payload.source === 'extension-popup' ? 'manual popup' : 'automated';
-      console.log(`[scrape] extension → electron: result (${via}) ${payload.jobId} ${payload.url}`);
+      const pkg = payload.capture?.listingPackages?.[0];
+      console.log(`[scrape] extension → electron: result (${via}) ${payload.jobId}`);
+      console.log('[vitt-dev] result', {
+        jobId: payload.jobId,
+        pageType: payload.capture?.pageType,
+        packageName: pkg?.name,
+        detail_url: pkg?.detail_url?.slice(0, 80),
+        outcome: payload.capture?.devLog?.outcome,
+        type4DurationMs: payload.capture?.pageType === 'mmt-package' ? payload.capture?.devLog?.durationMs : undefined,
+        type4Sections: payload.capture?.pageType === 'mmt-package' ? Object.keys(payload.capture?.sections || {}) : undefined
+      });
     } else if (payload.type === 'job_status') {
-      console.log(`[scrape] extension → electron: ${payload.status} ${payload.jobId}`);
+      console.log(`[scrape] extension → electron: ${payload.status} ${payload.jobId} — ${payload.message || ''}`);
     } else if (payload.type === 'scrape_error') {
       console.log(`[scrape] extension → electron: error ${payload.jobId} ${payload.error}`);
     }
-    sendScrapeBridgeEvent(filterScrapeData(payload));
+    sendScrapeBridgeEvent(payload);
   });
 
   createWindow();

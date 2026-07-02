@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const file = process.argv[2];
+const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+const sd = j['scrape-data'];
+const c = sd.capture;
+console.log('resultPhase:', sd.resultPhase);
+console.log('pageType:', sd.pageType, c?.pageType);
+console.log('listingPackages:', c?.listingPackages?.length ?? 'MISSING');
+console.log('matchedPackage:', c?.devLog?.matchedPackage?.name);
+console.log('bg events:', c?.devLog?.background?.events?.map((e) => e.type));

@@ -1,209 +1,296 @@
 /**
- * Vitt Overlay — scrape request formats for backend team
+ * Vitt Overlay — scrape REQUEST formats (server/AWS → overlay)
  *
- * Entry points:
- *   1. WebSocket  ws://127.0.0.1:5000/ws   route_type: "request_scrape"
- *   2. HTTP POST  http://127.0.0.1:5000/api/scrape
+ * The server broadcasts a flat WebSocket message to connected overlay clients.
+ * React receives it → Electron scrapeStart → extension bridge → Chrome scrape.
  *
- * Prerequisites: vitt-overlay-server running, Electron overlay + Chrome extension connected.
+ * Transport:  ws://127.0.0.1:5000/ws  (or ws://127.0.0.1:${VITT_PORT}/ws)
  *
- * Results are saved under: vitt-overlay-server/capture/<timestamp>.json
- * Job lifecycle events: scrape_status → scrape_result | scrape_error (via same WS)
+ * REQUIRED on every message:
+ *   type: "scrape_request"
+ *   jobId: UUID (server generates via randomUUID())
+ *   url:   string (listing or package URL)
+ *
+ * All scrape options are top-level siblings (not nested in scrape-data).
+ *
+ * Local triggers:
+ *   GET http://127.0.0.1:5000/api/scrape/test-type{1|2|3|4|5}
+ *   Startup: vitt-overlay-server/.env  req_type_1=true … req_type_5=true
+ *            One scrape per server start (first enabled req_type_* wins); restart to re-run
+ *
+ * Env overrides (server — see vitt-overlay-server/.env):
+ *   VITT_SCRAPE_START_DELAY_MS
+ *   VITT_LISTING_SCRAPE_URL
+ *   VITT_TYPE2_LISTING_URL / VITT_TYPE3_LISTING_URL / VITT_TYPE5_LISTING_URL
+ *   VITT_TYPE3_SEARCH_PACKAGE_NAME
+ *   VITT_TYPE3_EXTRACT_PACKAGE_DETAIL
+ *   VITT_TYPE1_EXTRACT_ALL_LISTING_TABS
+ *   VITT_PACKAGE_SCRAPE_URL
+ *
+ * Examples below mirror TYPE1–TYPE5 in vitt-overlay-server/src/index.js
+ * (same fields the server sends after mergeJobOptions).
  */
 
-// ---------------------------------------------------------------------------
-// Shared field reference
-// ---------------------------------------------------------------------------
-//
-// scrapeMode (required for intent):
-//   "mmt-listing"         — Type 1: listing page scroll + HTML/text (no URL clicks)
-//   "mmt-listing-urls"    — Type 2: listing scroll + click price box → package detail URLs
-//   "mmt-listing-search"  — Type 3: scroll listing until package name match → URLs for that package only
-//   "mmt-package"         — Type 4: package detail page (itinerary / policies / summary / sidebars)
-//
-// url (required): MMT holidays URL (listing /search or detail /package)
-//
-// Listing URL click options (Type 2 & 3):
-//   extractWithFlight     boolean  default true  — resolve "with flight" variant if shown
-//   extractWithoutFlight  boolean  default true  — resolve "without flight" variant if shown
-//   searchPackageName     string   Type 3 only — fuzzy match: every word must appear in card title
-//                                     e.g. "kolkata 2 nightful joy" matches "Kolkata 2 Nightful Joy Journey"
-//
-// Package detail options (Type 4):
-//   extractItinerary, extractPolicies, extractSummary  boolean  default true
-//   extractHotels, extractActivities, extractTransfers boolean  default true
-//   maxSidebarClicks  number  default 8
-//   waitMs            number  ms between steps (package default 2500)
-//
-// Common:
-//   scrollUntilStable  boolean  default true for listing modes
-//   waitMs             number   ms wait after each scroll (listing default 3000–4000)
-//   urls               string[] optional — multiple listing/package URLs in one request
+const exampleJobId = '550e8400-e29b-41d4-a716-446655440000';
+
+const KERALA_LISTING_URL =
+  'https://holidayz.makemytrip.com/holidays/india/search?fromSearchWidget=true&searchDep=Kerala&dest=Kerala&destValue=Kerala&depCity=New%20Delhi&initd=searchwidget_landing_Kerala_notheme&dateSearched=03%2F07%2F2026&glp=true&pdo=true&rooms=2%2C0%2C0%2C0%2C%2C%2C&affiliate=MMT##page_header';
+
+const KERALA_PACKAGE_URL =
+  'https://holidayz.makemytrip.com/holidays/india/package?fromSearchWidget=true&searchDep=Kerala&dest=Kerala&destValue=Kerala&depCity=New%20Delhi&initd=searchwidget_landing_Kerala_notheme&dateSearched=03%2F07%2F2026&glp=true&pdo=true&rooms=2%2C0%2C0%2C0%2C%2C%2C&affiliate=MMT&id=32287&listingClassId=4298&depDate=2026-07-03&fromCity=New%20Delhi&variantId=NO_MAJOR_COMMUTE_57531BC2&room=2%2C0%2C0%2C0%2C%2C%2C&searchDate=2026-07-03&pkgType=FIT';
 
 // ---------------------------------------------------------------------------
-// TYPE 1 — Listing only (current default behaviour)
+// TYPE 1 — mmt-listing (scroll + HTML/text, no URL clicks)
+// Server: TYPE1_LISTING_ONLY
 // ---------------------------------------------------------------------------
 export const type1_listingOnly = {
-  route_type: 'request_scrape',
-  'scrape-data': {
-    scrapeMode: 'mmt-listing',
-    url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
-    scrollUntilStable: true,
-    waitMs: 4000
-  }
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
+  scrapeMode: 'mmt-listing',
+  scrollUntilStable: false,
+  waitMs: 4000,
+  extractAllListingTabs: false,
+  listingTabName: 'All Packages',
+  extractItinerary: false,
+  extractPolicies: false,
+  extractSummary: false,
+  extractHotels: false,
+  extractActivities: false,
+  extractTransfers: false
 };
 
-// HTTP equivalent:
-// POST /api/scrape
-// {
-//   "scrapeMode": "mmt-listing",
-//   "url": "https://holidayz.makemytrip.com/holidays/india/search?dest=Goa"
-// }
+/** Type 1 — all #collectionList tabs (All Packages, Honeymoon, …) in parallel Chrome tabs */
+export const type1_listingAllTabs = {
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
+  scrapeMode: 'mmt-listing',
+  scrollUntilStable: false,
+  waitMs: 4000,
+  extractAllListingTabs: true
+};
 
 // ---------------------------------------------------------------------------
-// TYPE 2 — Listing + package detail URLs (interleaved scroll + click)
+// TYPE 2 — mmt-listing-urls (scroll listing + click all package detail URLs)
+// Server: TYPE2_LISTING_URLS
 // ---------------------------------------------------------------------------
 export const type2_listingWithUrls = {
-  route_type: 'request_scrape',
-  'scrape-data': {
-    scrapeMode: 'mmt-listing-urls',
-    url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
-    extractWithFlight: true,
-    extractWithoutFlight: true,
-    scrollUntilStable: true,
-    waitMs: 3000
-  }
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: KERALA_LISTING_URL,
+  scrapeMode: 'mmt-listing-urls',
+  scrollUntilStable: true,
+  waitMs: 3000,
+  extractWithFlight: true,
+  extractWithoutFlight: true
 };
 
-// HTTP:
-// {
-//   "scrapeMode": "mmt-listing-urls",
-//   "url": "https://holidayz.makemytrip.com/holidays/india/search?dest=Goa",
-//   "extractWithFlight": true,
-//   "extractWithoutFlight": true
-// }
-
 // ---------------------------------------------------------------------------
-// TYPE 3 — Find one package on listing + return its detail URL(s)
+// TYPE 3 — mmt-listing-search (find one package + detail URL(s))
+// Server: TYPE3_LISTING_SEARCH
 // ---------------------------------------------------------------------------
-export const type3_listingSearchPackage = {
-  route_type: 'request_scrape',
-  'scrape-data': {
-    scrapeMode: 'mmt-listing-search',
-    url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Kolkata',
-    searchPackageName: 'kolkata 2 nightful joy journey',
-    extractWithFlight: true,
-    extractWithoutFlight: false
-  }
+export const type3_listingSearchUrlsOnly = {
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: KERALA_LISTING_URL,
+  scrapeMode: 'mmt-listing-search',
+  scrollUntilStable: true,
+  waitMs: 3000,
+  extractWithFlight: true,
+  extractWithoutFlight: true,
+  searchPackageName: 'Family Holiday to Munnar & Alleppey',
+  extractPackageDetail: false,
+  extractItinerary: true,
+  extractPolicies: true,
+  extractSummary: true,
+  extractHotels: false,
+  extractActivities: false,
+  extractTransfers: false,
+  maxSidebarClicks: 8,
+  packageDetailWaitMs: 2500
 };
 
-// HTTP:
-// {
-//   "scrapeMode": "mmt-listing-search",
-//   "url": "https://holidayz.makemytrip.com/holidays/india/search?dest=Kolkata",
-//   "searchPackageName": "kolkata 2 nightful joy journey",
-//   "extractWithFlight": true,
-//   "extractWithoutFlight": false
-// }
+/** Type 3 + chain Type 4 (listing match → scrape detail page(s); both variants when both URLs exist) */
+export const type3_listingSearchWithPackageDetail = {
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: KERALA_LISTING_URL,
+  scrapeMode: 'mmt-listing-search',
+  scrollUntilStable: true,
+  waitMs: 3000,
+  extractWithFlight: true,
+  extractWithoutFlight: true,
+  searchPackageName: 'Family Holiday to Munnar & Alleppey',
+  extractPackageDetail: true,
+  extractItinerary: true,
+  extractPolicies: true,
+  extractSummary: true,
+  extractHotels: false,
+  extractActivities: false,
+  extractTransfers: false,
+  maxSidebarClicks: 8,
+  packageDetailWaitMs: 2500
+};
 
 // ---------------------------------------------------------------------------
-// TYPE 4 — Package detail page (full content scrape)
+// TYPE 4 — mmt-package (package detail page: itinerary / policies / sidebars)
+// Server: TYPE4_PACKAGE_DETAIL
 // ---------------------------------------------------------------------------
 export const type4_packageDetail = {
-  route_type: 'request_scrape',
-  'scrape-data': {
-    scrapeMode: 'mmt-package',
-    url:
-      'https://holidayz.makemytrip.com/holidays/india/package?dest=Goa&destValue=Goa&id=21828&depDate=2026-07-02',
-    extractItinerary: true,
-    extractPolicies: true,
-    extractSummary: true,
-    extractHotels: true,
-    extractActivities: true,
-    extractTransfers: true,
-    maxSidebarClicks: 8,
-    waitMs: 2500
-  }
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: KERALA_PACKAGE_URL,
+  scrapeMode: 'mmt-package',
+  scrollUntilStable: false,
+  waitMs: 2500,
+  extractItinerary: true,
+  extractPolicies: true,
+  extractSummary: true,
+  extractHotels: true,
+  extractActivities: true,
+  extractTransfers: false,
+  maxSidebarClicks: 8
 };
 
-// HTTP:
-// {
-//   "scrapeMode": "mmt-package",
-//   "url": "https://holidayz.makemytrip.com/holidays/india/package?...",
-//   "extractItinerary": true,
-//   "extractPolicies": true,
-//   "extractSummary": true,
-//   "extractHotels": true,
-//   "extractActivities": true,
-//   "extractTransfers": true,
-//   "maxSidebarClicks": 8
-// }
+// ---------------------------------------------------------------------------
+// TYPE 5 — mmt-listing-first-package
+// Server: TYPE5_FIRST_PACKAGE (req_type_5=true, VITT_TYPE5_LISTING_URL)
+//
+// Flow:
+//   1. Open listing URL → "All Packages" tab
+//   2. Scroll to bottom once → wait for cards (minPackageCards, best-effort)
+//   3. Click first card → intercept detail URL(s) (withFlight / withoutFlight / default)
+//   4. Send listing scrape_result immediately (resultPhase: "listing")
+//   5. Open all detail URLs in parallel Chrome tabs → Type 4 scrape each
+//   6. Send one scrape_result per variant as each finishes (resultPhase: "package_detail")
+//
+// Typical job with both flight variants → 3 server saves (1 listing + 2 Type 4).
+// ---------------------------------------------------------------------------
+export const type5_firstPackageDetail = {
+  type: 'scrape_request',
+  jobId: exampleJobId,
+  url: KERALA_LISTING_URL,
+  scrapeMode: 'mmt-listing-first-package',
+  scrollUntilStable: false,
+  waitMs: 4000,
+  minPackageCards: 4,
+  listingTabName: 'All Packages',
+  extractWithFlight: true,
+  extractWithoutFlight: true,
+  packageDetailWaitMs: 2500,
+  extractItinerary: true,
+  extractPolicies: false,
+  extractSummary: false,
+  extractHotels: false,
+  extractActivities: false,
+  extractTransfers: false,
+  maxSidebarClicks: 8
+};
 
-// ---------------------------------------------------------------------------
-// Expected result shape (listing with URLs — Type 2 / 3)
-// ---------------------------------------------------------------------------
-export const exampleResult_listingWithUrls = {
-  jobId: '<uuid>',
-  pageType: 'mmt-listing-urls',
-  url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
-  filtered: {
-    Goa: [
+/** Type 5 — listing phase response (first message, sent before Type 4 starts) */
+export const type5_responseListing = {
+  type: 'scrape_result',
+  jobId: exampleJobId,
+  resultPhase: 'listing',
+  url: KERALA_LISTING_URL,
+  extractedUrl: KERALA_LISTING_URL,
+  capture: {
+    pageType: 'mmt-listing-first-package',
+    listingPackages: [
       {
-        name: 'Super Saver Goa',
-        duration: '3N/4D',
-        price: '₹8,040',
-        detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?id=...&variantId=...',
+        name: 'Epic Kerala - Mega Price Drop Sale',
+        duration: '4N/5D',
+        detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?…',
         package_options: [
           {
-            option_label: 'With Flight ₹12,000 /Person',
-            detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?...&variantId=FLIGHT_...',
+            option_label: 'Starting from - Cochin Without Flight …',
+            detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?…',
+            flight_type: 'withoutFlight',
             status: 'ok'
           },
           {
-            option_label: 'Without Flight ₹8,040 /Person',
-            detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?...&variantId=NO_MAJOR_...',
+            option_label: 'Starting from - New Delhi With Flight …',
+            detail_url: 'https://holidayz.makemytrip.com/holidays/india/package?…',
+            flight_type: 'withFlight',
             status: 'ok'
-          },
-          {
-            option_label: 'With Flight Sold Out',
-            detail_url: '',
-            status: 'sold out'
           }
         ]
       }
     ]
-  },
+  }
+};
+
+/** Type 5 — package detail phase response (one per variant; Type 4 tabs run in parallel) */
+export const type5_responsePackageDetail = {
+  type: 'scrape_result',
+  jobId: exampleJobId,
+  resultPhase: 'package_detail',
+  url: KERALA_LISTING_URL,
+  extractedUrl: 'https://holidayz.makemytrip.com/holidays/india/package?…',
   capture: {
-    listingPackages: '/* same package array as above */',
-    pageType: 'mmt-listing-urls',
-    cardCount: 20
+    pageType: 'mmt-package',
+    flight_type: 'withoutFlight',
+    html: '<!DOCTYPE html>…',
+    sections: { itinerary: {}, policies: {}, summary: {} },
+    sidebars: { hotels: [], activities: [], transfers: [] }
   }
 };
 
 // ---------------------------------------------------------------------------
-// Variant / sold-out behaviour
-// ---------------------------------------------------------------------------
-// - If variant text contains "sold out" → status: "sold out", detail_url: ""
-// - If extractWithFlight: false → skip "with flight" variant clicks
-// - If extractWithoutFlight: false → skip "without flight" variant clicks
-// - If price box opens detail directly (no variant modal) → detail_url on package root
-// - Blocking modal on listing: closed via ._Modal.modalCont .close.closeIcon when needed
-
-// ---------------------------------------------------------------------------
-// curl examples
+// Field reference (top-level on scrape_request)
 // ---------------------------------------------------------------------------
 //
-// Type 2:
-// curl -X POST http://127.0.0.1:5000/api/scrape \
-//   -H "Content-Type: application/json" \
-//   -d '{"scrapeMode":"mmt-listing-urls","url":"https://holidayz.makemytrip.com/holidays/india/search?dest=Goa","extractWithFlight":true,"extractWithoutFlight":true}'
+// scrapeMode:
+//   "mmt-listing"                 — Type 1
+//   "mmt-listing-urls"            — Type 2
+//   "mmt-listing-search"          — Type 3
+//   "mmt-package"                 — Type 4
+//   "mmt-listing-first-package"   — Type 5
 //
-// Type 3:
-// curl -X POST http://127.0.0.1:5000/api/scrape \
-//   -H "Content-Type: application/json" \
-//   -d '{"scrapeMode":"mmt-listing-search","url":"https://holidayz.makemytrip.com/holidays/india/search?dest=Kolkata","searchPackageName":"kolkata 2 nightful joy","extractWithFlight":true,"extractWithoutFlight":false}'
+// Common (listing 1–3, 5):
+//   scrollUntilStable, waitMs, selector, cardSelector
+//
+// Type 5 request:
+//   minPackageCards           default 4 (wait after single scroll; still uses first card if fewer)
+//   listingTabName            default "All Packages"
+//   extractWithFlight, extractWithoutFlight
+//   packageDetailWaitMs       default 2500
+//   extractItinerary … maxSidebarClicks — Type 4 chain flags (match server TYPE5_FIRST_PACKAGE)
+//
+// Type 5 responses (scrape_result, same jobId):
+//   resultPhase: "listing"
+//     capture.pageType = mmt-listing-first-package
+//     capture.listingPackages[0] = first card (name, detail_url, package_options[])
+//   resultPhase: "package_detail"  (one per available variant; scraped in parallel)
+//     capture.pageType = mmt-package
+//     capture.flight_type = "withFlight" | "withoutFlight" | "default"
+//     capture.html = full page HTML
+//
+// Type 1:
+//   listingTabName          default "All Packages" (always in capture.listingTabs)
+//   extractAllListingTabs   default false — when true, adds Honeymoon etc. alongside All Packages
+//
+// Type 2 & 3:
+//   extractWithFlight, extractWithoutFlight, searchPackageName (Type 3)
+//
+// Type 3 optional Type 4 chain:
+//   extractPackageDetail    default false (VITT_TYPE3_EXTRACT_PACKAGE_DETAIL)
+//   packageDetailWaitMs     default 2500
+//   extractItinerary … maxSidebarClicks — used when extractPackageDetail true
 //
 // Type 4:
-// curl -X POST http://127.0.0.1:5000/api/scrape \
-//   -H "Content-Type: application/json" \
-//   -d '{"scrapeMode":"mmt-package","url":"https://holidayz.makemytrip.com/holidays/india/package?dest=Goa&id=21828"}'
+//   extractItinerary, extractPolicies, extractSummary, extractHotels,
+//   extractActivities, extractTransfers (server default: false), maxSidebarClicks
+//
+// Dev logs (server console + capture.devLog):
+//   Type 3 — scroll rounds, clicks, matched package
+//   Type 4 — main tabs, sidebar scan/click timeline, durationMs
+//   Type 5 — listing devLog + background timeline (listing_result_sent, package_detail_sent)
+//
+// ---------------------------------------------------------------------------
+// WRONG — do not send
+// ---------------------------------------------------------------------------
+//
+// { "route_type": "request_scrape", "scrape-data": { ... } }  — legacy, disabled
+// Missing type or jobId

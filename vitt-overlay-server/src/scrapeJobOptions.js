@@ -29,7 +29,16 @@ export function defaultExtractOptions(mode) {
       waitMs: 3000,
       extractWithFlight: true,
       extractWithoutFlight: true,
-      searchPackageName: ''
+      searchPackageName: '',
+      extractPackageDetail: false,
+      extractItinerary: true,
+      extractPolicies: true,
+      extractSummary: true,
+      extractHotels: true,
+      extractActivities: true,
+      extractTransfers: true,
+      maxSidebarClicks: 8,
+      packageDetailWaitMs: 2500
     };
   }
   if (mode === 'mmt-listing') {
@@ -37,12 +46,33 @@ export function defaultExtractOptions(mode) {
       scrapeMode: 'mmt-listing',
       scrollUntilStable: true,
       waitMs: 4000,
+      extractAllListingTabs: false,
+      listingTabName: 'All Packages',
       extractItinerary: false,
       extractPolicies: false,
       extractSummary: false,
       extractHotels: false,
       extractActivities: false,
       extractTransfers: false
+    };
+  }
+  if (mode === 'mmt-listing-first-package') {
+    return {
+      scrapeMode: 'mmt-listing-first-package',
+      scrollUntilStable: false,
+      waitMs: 4000,
+      minPackageCards: 4,
+      listingTabName: 'All Packages',
+      extractWithFlight: true,
+      extractWithoutFlight: true,
+      extractItinerary: true,
+      extractPolicies: true,
+      extractSummary: true,
+      extractHotels: true,
+      extractActivities: true,
+      extractTransfers: false,
+      maxSidebarClicks: 8,
+      packageDetailWaitMs: 2500
     };
   }
   return { scrapeMode: 'generic', scrollUntilStable: true, waitMs: 4000 };

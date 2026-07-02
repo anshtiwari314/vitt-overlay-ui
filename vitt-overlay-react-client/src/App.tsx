@@ -1231,6 +1231,11 @@ export default function App() {
               extractActivities: result.extractActivities as boolean | undefined,
               extractTransfers: result.extractTransfers as boolean | undefined,
               maxSidebarClicks: result.maxSidebarClicks as number | undefined,
+              extractAllListingTabs: result.extractAllListingTabs as boolean | undefined,
+              extractPackageDetail: result.extractPackageDetail as boolean | undefined,
+              packageDetailWaitMs: result.packageDetailWaitMs as number | undefined,
+              listingTabName: (result.listingTabName as string) ?? undefined,
+              minPackageCards: (result.minPackageCards as number) ?? undefined,
               status: 'queued' as const,
               message: 'Queued — waiting for Chrome extension'
             }
@@ -1370,10 +1375,10 @@ export default function App() {
           'scrape-data': {
             jobId: msg.jobId,
             pageType: msg.pageType,
+            resultPhase: msg.resultPhase,
             url: msg.url,
             extractedUrl: msg.extractedUrl ?? msg.url,
             source: msg.source,
-            filtered: msg.filtered,
             capture: msg.capture
           }
         })

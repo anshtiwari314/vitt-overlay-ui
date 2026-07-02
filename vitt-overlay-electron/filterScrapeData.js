@@ -458,12 +458,35 @@ function parseListingFromText(text = '') {
   return packages;
 }
 
-export function filterListingCapture(capture = {}, url = '') {
+function resolvePrimaryListingTabCapture(capture = {}) {
+  const tabs = capture.listingTabs;
+  if (!tabs || typeof tabs !== 'object') return capture;
+
+  const primaryName =
+    Object.keys(tabs).find(
+      (name) => String(name).trim().toLowerCase() === 'all packages'
+    ) || Object.keys(tabs)[0];
+  if (!primaryName) return capture;
+
+  const primary = tabs[primaryName];
+  if (!primary || typeof primary !== 'object') return capture;
+
+  return {
+    ...capture,
+    listingPackages: primary.listingPackages ?? capture.listingPackages,
+    html: primary.html ?? capture.html,
+    text: primary.text ?? capture.text
+  };
+}
+
+export function filterListingCapture(capture = {}, url = '', options = {}) {
   const destination = extractDestination(url) || 'Unknown';
   const packages = [];
   const seen = new Set();
+  const clickOnly = options.clickOnly === true;
+  const source = resolvePrimaryListingTabCapture(capture);
 
-  for (const pkg of capture.listingPackages || []) {
+  for (const pkg of source.listingPackages || []) {
     pushListingPackage(packages, seen, {
       name: pkg.name || '',
       duration: pkg.duration || '',
@@ -475,13 +498,25 @@ export function filterListingCapture(capture = {}, url = '') {
     });
   }
 
-  const fromHtml = parseListingFromHtml(capture.html || '');
+  if (clickOnly) {
+    const hasUrl = packages.some(
+      (pkg) =>
+        pkg.detail_url ||
+        (pkg.package_options || []).some((opt) => opt.detail_url)
+    );
+    return {
+      found: packages.length > 0 && hasUrl,
+      destination,
+      package: packages[0] || null
+    };
+  }
+
+  const fromHtml = parseListingFromHtml(source.html || '');
   for (const pkg of fromHtml) {
     pushListingPackage(packages, seen, pkg);
   }
 
-  // Supplement with text parsing (covers gaps when HTML is partial or card markup changes).
-  for (const pkg of parseListingFromText(capture.text || '')) {
+  for (const pkg of parseListingFromText(source.text || '')) {
     pushListingPackage(packages, seen, pkg);
   }
 
@@ -578,10 +613,14 @@ export function filterScrapeData(payload) {
       filtered = filterPackageCapture(capture, url);
     } else if (
       pageType === 'mmt-listing' ||
-      pageType === 'mmt-listing-urls' ||
-      pageType === 'mmt-listing-search'
+      pageType === 'mmt-listing-urls'
     ) {
       filtered = filterListingCapture(capture, url);
+    } else if (
+      pageType === 'mmt-listing-search' ||
+      pageType === 'mmt-listing-first-package'
+    ) {
+      filtered = filterListingCapture(capture, url, { clickOnly: true });
     }
   } catch (error) {
     filterError = error.message || String(error);
