@@ -60,9 +60,9 @@ const TYPE3_LISTING_URL =
 const TYPE1_LISTING_ONLY = {
   scrapeMode: 'mmt-listing',
   url: LISTING_SCRAPE_URL,
-  scrollUntilStable: false,
-  waitMs: 3000,
-  extractAllListingTabs: envBool('VITT_TYPE1_EXTRACT_ALL_LISTING_TABS', false),
+  scrollUntilStable: true,
+  waitMs: Number(process.env.VITT_TYPE1_WAIT_MS || 4000),
+  extractAllListingTabs: envBool('VITT_TYPE1_EXTRACT_ALL_LISTING_TABS', true),
   listingTabName: 'All Packages'
 };
 
@@ -85,7 +85,7 @@ const TYPE3_LISTING_SEARCH = {
   extractWithoutFlight: true,
   scrollUntilStable: true,
   waitMs: 3000,
-  extractPackageDetail: envBool('VITT_TYPE3_EXTRACT_PACKAGE_DETAIL', false),
+  extractPackageDetail: envBool('VITT_TYPE3_EXTRACT_PACKAGE_DETAIL', true),
   extractItinerary: true,
   extractPolicies: true,
   extractSummary: true,
@@ -293,7 +293,7 @@ function printType4Response(jobId, pageType, capture, meta = {}) {
   console.log('=====================================\n');
 }
 
-function printType5ListingResponse(jobId, capture, listingUrl) {
+function printListingChainListingResponse(jobId, capture, listingUrl) {
   const pkg =
     capture?.listingPackages?.[0] ||
     capture?.devLog?.matchedPackage ||
@@ -302,13 +302,18 @@ function printType5ListingResponse(jobId, capture, listingUrl) {
     pkg?.detail_url ||
     (pkg?.package_options || []).some((opt) => opt.detail_url)
   );
+  const label =
+    capture?.pageType === 'mmt-listing-search'
+      ? 'TYPE 3 RESPONSE (listing)'
+      : 'TYPE 5 RESPONSE (listing)';
 
-  console.log('\n========== TYPE 5 RESPONSE (listing) ==========');
+  console.log(`\n========== ${label} ==========`);
   console.log(JSON.stringify({
     jobId,
-    pageType: capture?.pageType || 'mmt-listing-first-package',
+    pageType: capture?.pageType || 'mmt-listing',
     resultPhase: 'listing',
     destination: extractDestination(listingUrl || capture?.url || ''),
+    searchPackageName: capture?.searchPackageName || null,
     firstPackage: pkg,
     hasDetailUrl: hasUrl,
     cardCount: capture?.cardCount,
@@ -323,42 +328,12 @@ function printType5ListingResponse(jobId, capture, listingUrl) {
   console.log('===============================================\n');
 }
 
-function printType3Response(jobId, pageType, capture, listingUrl) {
-  const pkg = capture?.listingPackages?.[0] || null;
-  const hasUrl = Boolean(
-    pkg?.detail_url ||
-    (pkg?.package_options || []).some((opt) => opt.detail_url)
-  );
-  const urls = {
-    detail_url: pkg?.detail_url || '',
-    package_options: (pkg?.package_options || []).map((opt) => ({
-      option_label: opt.option_label,
-      detail_url: opt.detail_url || '',
-      status: opt.status
-    }))
-  };
+function printType5ListingResponse(jobId, capture, listingUrl) {
+  printListingChainListingResponse(jobId, capture, listingUrl);
+}
 
-  console.log('\n========== TYPE 3 RESPONSE ==========');
-  console.log(JSON.stringify({
-    jobId,
-    pageType,
-    found: Boolean(pkg) && hasUrl,
-    destination: extractDestination(listingUrl || capture?.url || ''),
-    urls,
-    package: pkg
-  }, null, 2));
-  printType3DevLog(capture);
-  if (capture?.packageDetails?.length) {
-    for (const pd of capture.packageDetails) {
-      console.log(`\n--- TYPE 4 DEV LOG (chained from Type 3: ${pd.variant || pd.option_label}) ---`);
-      if (pd.error) {
-        console.log('Error:', pd.error);
-      } else if (pd.capture) {
-        printType4DevLog(pd.capture);
-      }
-    }
-  }
-  console.log('=====================================\n');
+function printType3Response(jobId, pageType, capture, listingUrl) {
+  printListingChainListingResponse(jobId, capture, listingUrl);
 }
 
 fs.mkdirSync(CAPTURE_DIR, { recursive: true });
@@ -415,6 +390,13 @@ function sendScrapeRequest(url, options = {}) {
 
   broadcast(msg);
   console.log('[scrape_request]', pageType, url.slice(0, 80), jobId);
+  if (pageType === 'mmt-listing') {
+    console.log(
+      '[scrape_request] mmt-listing extractAllListingTabs=',
+      merged.extractAllListingTabs === true,
+      merged.extractAllListingTabs === true ? '(parallel collection tabs)' : '(single tab only)'
+    );
+  }
   if (pageType === 'mmt-listing-search') {
     printType3Request(jobId, url, merged);
   }
@@ -435,7 +417,7 @@ function scrapeDataFromMessage(msg) {
 }
 
 function onWsMessage(ws, msg) {
-  const messageType = msg?.type || msg?.route_type;
+  const messageType = msg?.type ?? msg?.route_type;
   if (!messageType) return;
 
   switch (messageType) {
@@ -520,17 +502,23 @@ function onWsMessage(ws, msg) {
           capture
         }
       });
-      if (pageType === 'mmt-listing-first-package' && (resultPhase === 'listing' || !resultPhase)) {
-        printType5ListingResponse(jobId, capture, listingUrl);
-      }
-      if (pageType === 'mmt-listing-search') {
-        printType3Response(jobId, pageType, capture, listingUrl);
-      }
-      if (pageType === 'mmt-package') {
-        printType4Response(jobId, pageType, capture, { resultPhase });
+      const capturePageType = capture?.pageType || pageType;
+      if (resultPhase === 'listing') {
+        if (
+          capturePageType === 'mmt-listing-first-package' ||
+          capturePageType === 'mmt-listing-search'
+        ) {
+          printListingChainListingResponse(jobId, capture, listingUrl);
+        }
+      } else if (capturePageType === 'mmt-package') {
+        printType4Response(jobId, capturePageType, capture, { resultPhase });
+      } else if (capturePageType === 'mmt-listing-search') {
+        printListingChainListingResponse(jobId, capture, listingUrl);
       }
       const jobStatus =
-        resultPhase === 'listing' && pageType === 'mmt-listing-first-package'
+        resultPhase === 'listing' &&
+        (capturePageType === 'mmt-listing-first-package' ||
+          capturePageType === 'mmt-listing-search')
           ? 'listing_done'
           : resultPhase === 'package_detail'
             ? 'package_detail_done'

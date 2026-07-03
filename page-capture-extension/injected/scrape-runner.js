@@ -91,9 +91,8 @@
     document.dispatchEvent(new Event('scroll'));
   };
 
-  /** Poll every 1s for up to waitMs; scroll again immediately when height/cards grow. */
-  const waitForContentGrowth = async (root, heightBefore, cardsBefore, maxWaitMs) => {
-    const pollIntervalMs = 1000;
+  /** Poll for up to maxWaitMs; scroll again immediately when height/cards grow. */
+  const waitForContentGrowth = async (root, heightBefore, cardsBefore, maxWaitMs, pollIntervalMs = 1000) => {
     scrollToBottom(root);
     dispatchScrollEvents();
 
@@ -360,6 +359,15 @@
     return countCards() > 0;
   };
 
+  const waitForCollectionTabBar = async () => {
+    const deadline = Date.now() + waitMs;
+    while (Date.now() < deadline) {
+      if (tabListItems().length > 0) return true;
+      await sleep(500);
+    }
+    return tabListItems().length > 0;
+  };
+
   const activateListingTab = async (tabName) => {
     const want = normalizeTabName(tabName);
     await scrollTabBarToStart();
@@ -368,6 +376,10 @@
         const name = (li.querySelector('.name')?.textContent || '').trim();
         if (normalizeTabName(name) !== want) continue;
         li.scrollIntoView({ block: 'nearest', inline: 'center' });
+        if (li.classList.contains('active')) {
+          await waitForListingCardsReady();
+          return true;
+        }
         li.click();
         await sleep(Math.min(waitMs, 2000));
         await waitForListingCardsReady();
@@ -381,9 +393,11 @@
     return false;
   };
 
-  await dismissPageOverlays();
+  const isListingOnly = opts.scrapeMode === 'mmt-listing';
 
   if (opts.discoverListingTabsOnly) {
+    await dismissPageOverlays();
+    await waitForCollectionTabBar();
     const listingTabCatalog = await collectAllListingTabNames();
     window.__vittScrapeResult = {
       schemaVersion: 2,
@@ -397,10 +411,16 @@
     return;
   }
 
-  if (opts.listingTabName && opts.scrapeMode === 'mmt-listing') {
+  if (opts.listingTabName && isListingOnly) {
+    await waitForCollectionTabBar();
+  }
+
+  await dismissPageOverlays();
+
+  if (opts.listingTabName && isListingOnly) {
     const activated = await activateListingTab(opts.listingTabName);
     if (!activated) {
-      throw new Error(`Listing tab not found: ${opts.listingTabName}`);
+      console.warn('[vitt] Listing tab not found, continuing with visible content:', opts.listingTabName);
     }
   }
 
@@ -554,6 +574,7 @@
       opts.listingTabName ||
       readListingTabCatalog().find((t) => normalizeTabName(t.name) === normalizeTabName('All Packages'))?.name ||
       'All Packages';
+    await waitForCollectionTabBar();
     const activated = await activateListingTab(allPackagesTab);
     if (!activated && devLog) {
       devLog.events.push({ type: 'listing_tab_not_found', tab: allPackagesTab });
@@ -594,40 +615,55 @@
     if (dynamicPackages.length === 0 && devLog?.matchedPackage) {
       dynamicPackages.push(devLog.matchedPackage);
     }
-  } else if (scrollUntilStable) {
+  } else if (scrollUntilStable || opts.scrapeMode === 'mmt-listing') {
     const root = getScrollRoot();
     let noGrowth = 0;
     let rounds = 0;
-    const maxRounds = isListingSearch ? 45 : 25;
-    const noGrowthLimit = isListingSearch ? 8 : 1;
+    const isListingOnly = opts.scrapeMode === 'mmt-listing';
 
     await dismissPageOverlays();
 
-    while (rounds < maxRounds) {
-      await dismissPageOverlays();
-
-      const heightBefore = getScrollHeight(root);
-      const cardsBefore = countCards();
-      const { grew, cardsAfter } = await waitForContentGrowth(root, heightBefore, cardsBefore, waitMs);
-
-      if (opts.scrapeMode === 'mmt-listing-urls' || isListingSearch) {
-        const found = await processVisibleCards(dynamicPackages, dynamicSeen, rounds + 1);
-        if (found && isListingSearch) break;
+    if (isListingOnly) {
+      // Type 1 — poll every 500ms up to waitMs; scroll to bottom immediately when cards load.
+      const maxRounds = 25;
+      while (rounds < maxRounds && noGrowth < 2) {
+        const heightBefore = getScrollHeight(root);
+        const cardsBefore = countCards();
+        const { grew } = await waitForContentGrowth(root, heightBefore, cardsBefore, waitMs, 500);
+        if (grew) noGrowth = 0;
+        else noGrowth += 1;
+        rounds += 1;
       }
+    } else {
+      const maxRounds = isListingSearch ? 45 : 25;
+      const noGrowthLimit = isListingSearch ? 8 : 1;
 
-      if (grew) noGrowth = 0;
-      else noGrowth += 1;
+      while (rounds < maxRounds) {
+        await dismissPageOverlays();
 
-      if (devLog) {
-        devLog.rounds.push({ round: rounds + 1, cardsAfter, grew, noGrowth });
+        const heightBefore = getScrollHeight(root);
+        const cardsBefore = countCards();
+        const { grew, cardsAfter } = await waitForContentGrowth(root, heightBefore, cardsBefore, waitMs);
+
+        if (opts.scrapeMode === 'mmt-listing-urls' || isListingSearch) {
+          const found = await processVisibleCards(dynamicPackages, dynamicSeen, rounds + 1);
+          if (found && isListingSearch) break;
+        }
+
+        if (grew) noGrowth = 0;
+        else noGrowth += 1;
+
+        if (devLog) {
+          devLog.rounds.push({ round: rounds + 1, cardsAfter, grew, noGrowth });
+        }
+
+        rounds += 1;
+        if (!isListingSearch && noGrowth >= noGrowthLimit) break;
       }
-
-      rounds += 1;
-      if (!isListingSearch && noGrowth >= noGrowthLimit) break;
-    }
-    if (devLog && devLog.outcome === 'not_found') {
-      devLog.totalCardsInDom = countCards();
-      devLog.totalRounds = devLog.rounds.length;
+      if (devLog && devLog.outcome === 'not_found') {
+        devLog.totalCardsInDom = countCards();
+        devLog.totalRounds = devLog.rounds.length;
+      }
     }
   }
 

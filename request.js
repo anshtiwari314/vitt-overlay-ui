@@ -25,6 +25,7 @@
  *   VITT_TYPE3_SEARCH_PACKAGE_NAME
  *   VITT_TYPE3_EXTRACT_PACKAGE_DETAIL
  *   VITT_TYPE1_EXTRACT_ALL_LISTING_TABS
+ *   VITT_TYPE1_WAIT_MS
  *   VITT_PACKAGE_SCRAPE_URL
  *
  * Examples below mirror TYPE1–TYPE5 in vitt-overlay-server/src/index.js
@@ -48,7 +49,7 @@ export const type1_listingOnly = {
   jobId: exampleJobId,
   url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
   scrapeMode: 'mmt-listing',
-  scrollUntilStable: false,
+  scrollUntilStable: true,
   waitMs: 4000,
   extractAllListingTabs: false,
   listingTabName: 'All Packages',
@@ -60,13 +61,13 @@ export const type1_listingOnly = {
   extractTransfers: false
 };
 
-/** Type 1 — all #collectionList tabs (All Packages, Honeymoon, …) in parallel Chrome tabs */
+/** Type 1 — all #collectionList tabs; discover once then scrape each in parallel Chrome tabs */
 export const type1_listingAllTabs = {
   type: 'scrape_request',
   jobId: exampleJobId,
   url: 'https://holidayz.makemytrip.com/holidays/india/search?dest=Goa',
   scrapeMode: 'mmt-listing',
-  scrollUntilStable: false,
+  scrollUntilStable: true,
   waitMs: 4000,
   extractAllListingTabs: true
 };
@@ -89,7 +90,17 @@ export const type2_listingWithUrls = {
 // ---------------------------------------------------------------------------
 // TYPE 3 — mmt-listing-search (find one package + detail URL(s))
 // Server: TYPE3_LISTING_SEARCH
+//
+// Flow (Type 3 sends detail pages only — no listing scrape_result to backend):
+//   1. Open listing URL → scroll/search for searchPackageName (internal)
+//   2. Click matched card → intercept detail URL(s) (withFlight / withoutFlight / default)
+//   3. If extractPackageDetail: open detail URLs in parallel → Type 4 scrape each
+//   4. Send one scrape_result per variant (resultPhase: "package_detail") — same JSON as Type 4/5
+//
+// extractPackageDetail: false → no backend messages (listing used only to resolve URLs locally)
+// extractPackageDetail: true  → 1–2 package_detail messages only (withFlight / withoutFlight)
 // ---------------------------------------------------------------------------
+/** Type 3 — URLs only (no scrape_result sent to backend; listing is internal) */
 export const type3_listingSearchUrlsOnly = {
   type: 'scrape_request',
   jobId: exampleJobId,
@@ -111,7 +122,7 @@ export const type3_listingSearchUrlsOnly = {
   packageDetailWaitMs: 2500
 };
 
-/** Type 3 + chain Type 4 (listing match → scrape detail page(s); both variants when both URLs exist) */
+/** Type 3 — detail pages only (1–2 messages: withFlight / withoutFlight; no listing message) */
 export const type3_listingSearchWithPackageDetail = {
   type: 'scrape_request',
   jobId: exampleJobId,
@@ -131,6 +142,22 @@ export const type3_listingSearchWithPackageDetail = {
   extractTransfers: false,
   maxSidebarClicks: 8,
   packageDetailWaitMs: 2500
+};
+
+/** Type 3 does not send a listing scrape_result — only package_detail (same shape as Type 5 detail). */
+export const type3_responsePackageDetail = {
+  type: 'scrape_result',
+  jobId: exampleJobId,
+  resultPhase: 'package_detail',
+  url: KERALA_LISTING_URL,
+  extractedUrl: 'https://holidayz.makemytrip.com/holidays/india/package?…',
+  capture: {
+    pageType: 'mmt-package',
+    flight_type: 'withoutFlight',
+    html: '<!DOCTYPE html>…',
+    sections: { itinerary: {}, policies: {}, summary: {} },
+    sidebars: { hotels: [], activities: [], transfers: [] }
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -274,10 +301,14 @@ export const type5_responsePackageDetail = {
 // Type 2 & 3:
 //   extractWithFlight, extractWithoutFlight, searchPackageName (Type 3)
 //
-// Type 3 optional Type 4 chain:
-//   extractPackageDetail    default false (VITT_TYPE3_EXTRACT_PACKAGE_DETAIL)
+// Type 3 optional Type 4 chain (backend receives detail pages only — no listing message):
+//   extractPackageDetail    default true (VITT_TYPE3_EXTRACT_PACKAGE_DETAIL)
 //   packageDetailWaitMs     default 2500
 //   extractItinerary … maxSidebarClicks — used when extractPackageDetail true
+//
+// Type 3 responses (scrape_result, same jobId):
+//   resultPhase: "package_detail" only (1–2 messages; withFlight / withoutFlight in parallel)
+//     capture.pageType = mmt-package (identical to Type 4 / Type 5 detail phase)
 //
 // Type 4:
 //   extractItinerary, extractPolicies, extractSummary, extractHotels,
@@ -286,7 +317,7 @@ export const type5_responsePackageDetail = {
 // Dev logs (server console + capture.devLog):
 //   Type 3 — scroll rounds, clicks, matched package
 //   Type 4 — main tabs, sidebar scan/click timeline, durationMs
-//   Type 5 — listing devLog + background timeline (listing_result_sent, package_detail_sent)
+//   Type 3 & 5 — listing devLog + background timeline (listing_result_sent, package_detail_sent)
 //
 // ---------------------------------------------------------------------------
 // WebSocket message types (overlay ↔ server)
@@ -297,7 +328,7 @@ export const type5_responsePackageDetail = {
 //
 // Overlay → server (response / status):
 //   type: "scrape_status"      — progress (loading / scrolling / extracting)
-//   type: "scrape_result"      — final capture (Type 5: multiple per jobId, use resultPhase)
+//   type: "scrape_result"      — capture (Type 3: package_detail only; Type 5: listing + package_detail)
 //   type: "scrape_error"       — job failed
 //   type: "request_scrape"      — optional batch queue from Scrape tab (urls in scrape-data)
 //

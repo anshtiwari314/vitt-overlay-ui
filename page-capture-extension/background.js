@@ -399,7 +399,65 @@ function waitForTabLoad(tabId, timeoutMs = 45000, onProgress) {
 
 }
 
+function isListingScrapeMode(mode) {
+  return (
+    mode === 'mmt-listing' ||
+    mode === 'mmt-listing-urls' ||
+    mode === 'mmt-listing-search' ||
+    mode === 'mmt-listing-first-package'
+  );
+}
 
+/** Wait until MMT listing SPA renders #collectionList tabs (poll every 500ms, max timeoutMs / job.waitMs). */
+async function waitForMmtListingReady(tabId, timeoutMs = 4000, onProgress, options = {}) {
+  const requireCollectionTabs = options.requireCollectionTabs === true;
+  const requireCards = options.requireCards === true;
+  const startedAt = Date.now();
+  let lastProgressAt = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    let state = null;
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (needTabs, needCards) => {
+          const tabs = document.querySelectorAll(
+            '#collectionList .tabsWrapper li, .tabScrollSection .tabsWrapper li'
+          );
+          const cards = document.querySelectorAll('[class*="packageCard"]');
+          const tabCount = tabs.length;
+          const cardCount = cards.length;
+          let ready = false;
+          if (needTabs && needCards) ready = tabCount > 0 && cardCount > 0;
+          else if (needTabs) ready = tabCount > 0;
+          else ready = tabCount > 0 || cardCount > 0;
+          return { tabCount, cardCount, ready };
+        },
+        args: [requireCollectionTabs, requireCards]
+      });
+      state = injection?.result;
+    } catch {
+      state = null;
+    }
+
+    if (state?.ready) {
+      return state;
+    }
+
+    if (onProgress && Date.now() - lastProgressAt >= 2500) {
+      lastProgressAt = Date.now();
+      void onProgress(
+        requireCollectionTabs
+          ? `Waiting for collection tabs (${Math.round((Date.now() - startedAt) / 1000)}s / ${Math.round(timeoutMs / 1000)}s)`
+          : `Waiting for listing content (${Math.round((Date.now() - startedAt) / 1000)}s)`
+      );
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  return null;
+}
 
 function buildScrapeOpts(job) {
   const url = job.url || '';
@@ -522,13 +580,20 @@ async function captureImmediateFromTab(tabId, job) {
 async function waitForPageScrapeResult(tabId, timeoutMs = 180000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const [{ result: capture }] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => window.__vittScrapeResult
-    });
-    if (capture) {
-      if (capture.error) throw new Error(capture.error);
-      return capture;
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => window.__vittScrapeResult
+      });
+      const capture = injection?.result;
+      if (capture) {
+        if (capture.error) throw new Error(capture.error);
+        return capture;
+      }
+    } catch (err) {
+      if (err?.message && !/Cannot access|No tab with id|Frame with ID/.test(err.message)) {
+        throw err;
+      }
     }
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -549,6 +614,7 @@ async function extractScrapeFromTab(tabId, job, onProgress) {
   await chrome.scripting.executeScript({
     target: { tabId },
     func: (opts) => {
+      delete window.__vittScrapeResult;
       document.documentElement.setAttribute('data-vitt-scrape-opts', JSON.stringify(opts));
     },
     args: [scrapeOpts]
@@ -572,7 +638,9 @@ async function extractScrapeFromTab(tabId, job, onProgress) {
     scrapeOpts.scrapeMode === 'mmt-listing-search' ||
     scrapeOpts.scrapeMode === 'mmt-listing-first-package'
       ? 180000
-      : 90000;
+      : scrapeOpts.scrapeMode === 'mmt-listing'
+        ? Math.min(180000, (job.waitMs ?? 4000) * 8 + 20000)
+        : 90000;
 
   if (scrapeOpts.scrapeMode === 'mmt-package' && onProgress) {
     await onProgress('Type 4: extracting itinerary / policies / summary + sidebars (see server dev log)');
@@ -593,54 +661,61 @@ async function extractScrapeFromTab(tabId, job, onProgress) {
 
 async function openListingPageTab(job, onProgress, { active = false } = {}) {
   const tab = await chrome.tabs.create({ url: job.url, active });
-  const loadTimeout = 45000;
-  const loadResult = await waitForTabLoad(tab.id, loadTimeout, (message) => {
+  const loadTimeout = isListingScrapeMode(job.scrapeMode) ? 180000 : 45000;
+  await waitForTabLoad(tab.id, loadTimeout, (message) => {
     if (onProgress) void onProgress(message);
   });
+  const readyMs = job.waitMs ?? 4000;
+  const needCollectionTabs =
+    job.extractAllListingTabs === true ||
+    job.scrapeMode === 'mmt-listing-first-package' ||
+    job.discoverListingTabsOnly === true;
+  const needListingHydration =
+    needCollectionTabs ||
+    job.scrapeMode === 'mmt-listing' ||
+    isListingScrapeMode(job.scrapeMode);
+  if (needListingHydration) {
+    await waitForMmtListingReady(
+      tab.id,
+      readyMs,
+      onProgress,
+      { requireCollectionTabs: needCollectionTabs }
+    );
+  }
   await new Promise((r) => setTimeout(r, 1500));
-  return { tabId: tab.id, loadResult };
+  return { tabId: tab.id };
 }
 
-async function discoverListingCollectionTabs(job, onProgress) {
-  let tabId = null;
-  try {
-    if (onProgress) await onProgress('Discovering listing collection tabs');
-    const opened = await openListingPageTab(job, onProgress, { active: true });
-    tabId = opened.tabId;
+/** Read #collectionList tab names from an already-open listing tab (background already waited waitMs). */
+async function discoverCatalogOnTab(tabId, job, onProgress) {
+  const readyMs = job.waitMs ?? 4000;
+  await waitForMmtListingReady(tabId, readyMs, onProgress, { requireCollectionTabs: true });
 
-    const discoverOpts = { ...buildScrapeOpts(job), discoverListingTabsOnly: true };
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (opts) => {
-        document.documentElement.setAttribute('data-vitt-scrape-opts', JSON.stringify(opts));
-      },
-      args: [discoverOpts]
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['injected/scrape-runner.js']
-    });
+  const discoverOpts = { ...buildScrapeOpts(job), discoverListingTabsOnly: true };
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (opts) => {
+      delete window.__vittScrapeResult;
+      document.documentElement.setAttribute('data-vitt-scrape-opts', JSON.stringify(opts));
+    },
+    args: [discoverOpts]
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['injected/scrape-runner.js']
+  });
 
-    const capture = await waitForPageScrapeResult(tabId, 90000);
-    return capture?.listingTabCatalog || [];
-  } finally {
-    if (tabId != null) {
-      try {
-        await chrome.tabs.remove(tabId);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+  const discoverTimeout = Math.max(readyMs * 4, 30000);
+  const capture = await waitForPageScrapeResult(tabId, discoverTimeout);
+  return capture?.listingTabCatalog || [];
 }
 
 async function scrapeListingCollectionTab(job, tabInfo, onProgress) {
   let tabId = null;
   try {
-    if (onProgress) await onProgress(`Scraping tab: ${tabInfo.name}`);
-    const opened = await openListingPageTab({ ...job, url: job.url }, onProgress);
+    if (onProgress) void onProgress(`Scraping tab: ${tabInfo.name}`);
+    const opened = await openListingPageTab(job, onProgress, { active: false });
     tabId = opened.tabId;
-
     const subJob = { ...job, listingTabName: tabInfo.name, extractAllListingTabs: false };
     return await extractScrapeFromTab(tabId, subJob, onProgress);
   } finally {
@@ -652,6 +727,110 @@ async function scrapeListingCollectionTab(job, tabInfo, onProgress) {
       }
     }
   }
+}
+
+async function runMultiTabListingScrape(job, jobDevLog, onProgress) {
+  let discoverTabId = null;
+  let catalog = [];
+
+  try {
+    if (onProgress) await onProgress('Opening listing page to discover collection tabs');
+    const opened = await openListingPageTab(job, onProgress, { active: true });
+    discoverTabId = opened.tabId;
+    try {
+      catalog = await discoverCatalogOnTab(discoverTabId, job, onProgress);
+    } catch (discoverErr) {
+      jobDevLog.events.push({
+        type: 'listing_tabs_discover_error',
+        error: discoverErr?.message || String(discoverErr)
+      });
+      catalog = [];
+    }
+  } finally {
+    if (discoverTabId != null) {
+      try {
+        await chrome.tabs.remove(discoverTabId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  if (!catalog.length) {
+    const tabName = job.listingTabName || 'All Packages';
+    jobDevLog.events.push({ type: 'listing_tabs_discover_empty', fallback: tabName });
+    catalog = [{ name: tabName, packCount: '' }];
+    if (onProgress) {
+      await onProgress(`No collection tabs discovered — scraping "${tabName}" only`);
+    }
+  } else {
+    jobDevLog.events.push({
+      type: 'listing_tabs_discovered',
+      count: catalog.length,
+      tabs: catalog.map((t) => ({ name: t.name, packCount: t.packCount }))
+    });
+    if (onProgress) {
+      await onProgress(`Found ${catalog.length} collection tabs — scraping in parallel`);
+    }
+  }
+
+  const settled = await Promise.allSettled(
+    catalog.map((tabInfo) => scrapeListingCollectionTab(job, tabInfo, onProgress))
+  );
+
+  const listingTabs = {};
+  const listingTabErrors = [];
+
+  for (let i = 0; i < catalog.length; i += 1) {
+    const tabInfo = catalog[i];
+    const result = settled[i];
+    if (result.status === 'fulfilled') {
+      listingTabs[tabInfo.name] = buildListingTabCaptureEntry(tabInfo, result.value);
+    } else {
+      listingTabErrors.push({
+        name: tabInfo.name,
+        error: result.reason?.message || String(result.reason)
+      });
+      jobDevLog.events.push({
+        type: 'listing_tab_scrape_error',
+        name: tabInfo.name,
+        error: result.reason?.message || String(result.reason)
+      });
+    }
+  }
+
+  if (!Object.keys(listingTabs).length) {
+    throw new Error(listingTabErrors[0]?.error || 'All listing tab scrapes failed');
+  }
+
+  const primaryName =
+    catalog.find((t) => normalizeListingTabKey(t.name) === normalizeListingTabKey('All Packages'))?.name ||
+    catalog[0].name;
+  const primary = listingTabs[primaryName] || listingTabs[Object.keys(listingTabs)[0]];
+  const firstSuccess = settled.find((r) => r.status === 'fulfilled')?.value;
+
+  return {
+    schemaVersion: 2,
+    pageType: 'mmt-listing',
+    extractAllListingTabs: true,
+    capturedAt: new Date().toISOString(),
+    url: job.url,
+    extractedUrl: job.url,
+    title: firstSuccess?.title || primary.text?.slice(0, 200) || '',
+    canonicalUrl: firstSuccess?.canonicalUrl || null,
+    language: firstSuccess?.language || null,
+    selector: job.selector || null,
+    scrollUntilStable: job.scrollUntilStable !== false,
+    html: primary.html,
+    text: primary.text,
+    links: primary.links,
+    images: primary.images,
+    cardCount: primary.cardCount,
+    listingTabCatalog: catalog,
+    listingTabs,
+    listingPackages: primary.listingPackages || [],
+    listingTabErrors: listingTabErrors.length ? listingTabErrors : undefined
+  };
 }
 
 function buildListingTabCaptureEntry(tabInfo, capture) {
@@ -688,78 +867,6 @@ function wrapSingleTabListingCapture(capture, tabName = 'All Packages') {
     images: entry.images,
     cardCount: entry.cardCount,
     listingPackages: entry.listingPackages
-  };
-}
-
-async function runMultiTabListingScrape(job, jobDevLog, onProgress) {
-  const catalog = await discoverListingCollectionTabs(job, onProgress);
-  if (!catalog.length) {
-    throw new Error('No listing collection tabs found (#collectionList .tabsWrapper)');
-  }
-
-  jobDevLog.events.push({
-    type: 'listing_tabs_discovered',
-    count: catalog.length,
-    tabs: catalog.map((t) => ({ name: t.name, packCount: t.packCount }))
-  });
-
-  if (onProgress) {
-    await onProgress(`Scraping ${catalog.length} listing tabs in parallel`);
-  }
-
-  const settled = await Promise.allSettled(
-    catalog.map((tabInfo) => scrapeListingCollectionTab(job, tabInfo, onProgress))
-  );
-
-  const listingTabs = {};
-  const listingTabErrors = [];
-
-  for (let i = 0; i < catalog.length; i += 1) {
-    const tabInfo = catalog[i];
-    const result = settled[i];
-    if (result.status === 'fulfilled') {
-      listingTabs[tabInfo.name] = buildListingTabCaptureEntry(tabInfo, result.value);
-    } else {
-      listingTabErrors.push({
-        name: tabInfo.name,
-        error: result.reason?.message || String(result.reason)
-      });
-    }
-  }
-
-  if (!Object.keys(listingTabs).length) {
-    throw new Error(
-      listingTabErrors[0]?.error || 'All listing tab scrapes failed'
-    );
-  }
-
-  const primaryName =
-    catalog.find((t) => normalizeListingTabKey(t.name) === normalizeListingTabKey('All Packages'))?.name ||
-    catalog[0].name;
-  const primary = listingTabs[primaryName] || listingTabs[Object.keys(listingTabs)[0]];
-  const firstSuccess = settled.find((r) => r.status === 'fulfilled')?.value;
-
-  return {
-    schemaVersion: 2,
-    pageType: 'mmt-listing',
-    extractAllListingTabs: true,
-    capturedAt: new Date().toISOString(),
-    url: job.url,
-    extractedUrl: job.url,
-    title: firstSuccess?.title || '',
-    canonicalUrl: firstSuccess?.canonicalUrl || null,
-    language: firstSuccess?.language || null,
-    selector: job.selector || null,
-    scrollUntilStable: job.scrollUntilStable !== false,
-    html: primary.html,
-    text: primary.text,
-    links: primary.links,
-    images: primary.images,
-    cardCount: primary.cardCount,
-    listingPackages: primary.listingPackages,
-    listingTabCatalog: catalog,
-    listingTabs,
-    listingTabErrors: listingTabErrors.length ? listingTabErrors : undefined
   };
 }
 
@@ -855,7 +962,12 @@ async function runPackageDetailScrape(parentJob, target, onProgress) {
     });
     await new Promise((r) => setTimeout(r, 1500));
 
-    return await extractScrapeFromTab(tabId, packageJob, onProgress);
+    return await extractScrapeFromTab(tabId, packageJob, onProgress).then((capture) => {
+      if (target.flight_type && !capture.flight_type) {
+        capture.flight_type = target.flight_type;
+      }
+      return capture;
+    });
   } finally {
     if (tabId != null) {
       try {
@@ -867,69 +979,8 @@ async function runPackageDetailScrape(parentJob, target, onProgress) {
   }
 }
 
-async function attachPackageDetailsFromListingSearch(job, capture, jobDevLog, onProgress) {
-  if (job.extractPackageDetail !== true || job.scrapeMode !== 'mmt-listing-search') {
-    return capture;
-  }
-
-  const listingPkg = resolveFirstListingPackage(capture);
-  const targets = collectPackageDetailTargets(listingPkg, job);
-
-  capture.extractPackageDetail = true;
-
-  if (!targets.length) {
-    capture.packageDetails = [];
-    capture.packageDetailError = 'No package detail URLs found on matched listing card';
-    jobDevLog.events.push({ type: 'package_detail_skipped', reason: 'no_urls' });
-    return capture;
-  }
-
-  jobDevLog.events.push({
-    type: 'package_detail_targets',
-    count: targets.length,
-    targets: targets.map((t) => ({ variant: t.variant, detail_url: t.detail_url.slice(0, 120) }))
-  });
-
-  if (onProgress) {
-    await onProgress(`Extracting ${targets.length} package detail page(s)`);
-  }
-
-  const packageDetails = [];
-  for (const target of targets) {
-    try {
-      const detailCapture = await runPackageDetailScrape(job, target, onProgress);
-      packageDetails.push({
-        option_label: target.option_label,
-        variant: target.variant,
-        detail_url: target.detail_url,
-        capture: detailCapture
-      });
-      jobDevLog.events.push({
-        type: 'package_detail_done',
-        variant: target.variant,
-        detail_url: target.detail_url.slice(0, 120)
-      });
-    } catch (error) {
-      packageDetails.push({
-        option_label: target.option_label,
-        variant: target.variant,
-        detail_url: target.detail_url,
-        error: error.message || String(error)
-      });
-      jobDevLog.events.push({
-        type: 'package_detail_error',
-        variant: target.variant,
-        error: error.message || String(error)
-      });
-    }
-  }
-
-  capture.packageDetails = packageDetails;
-  return capture;
-}
-
-/** Type 5: send each Type 4 result to backend as soon as it completes (listing already sent). */
-async function streamPackageDetailsFromFirstListing(job, capture, jobDevLog, onProgress, listingUrl) {
+/** Type 3 / Type 5: send each Type 4 result to backend as soon as it completes (listing already sent). */
+async function streamPackageDetailsFromListing(job, capture, jobDevLog, onProgress, listingUrl) {
   normalizeFirstListingCapture(capture);
   const listingPkg = resolveFirstListingPackage(capture);
   const targets = collectPackageDetailTargets(listingPkg, job);
@@ -1050,10 +1101,17 @@ async function runManualCaptureOnTab(tabId, options = {}) {
 async function runScrapeJob(job) {
 
   let tabId = null;
+  let jobErrored = false;
+  const jobStartedAt = Date.now();
   const jobDevLog = { jobId: job.jobId, events: [] };
   const note = (type, detail = {}) => {
-    jobDevLog.events.push({ ts: new Date().toISOString(), type, ...detail });
-    devLog(`job_${type}`, { jobId: job.jobId, ...detail });
+    jobDevLog.events.push({
+      ts: new Date().toISOString(),
+      type,
+      elapsedMs: Date.now() - jobStartedAt,
+      ...detail
+    });
+    devLog(`job_${type}`, { jobId: job.jobId, elapsedMs: Date.now() - jobStartedAt, ...detail });
   };
 
   try {
@@ -1097,7 +1155,8 @@ async function runScrapeJob(job) {
       scrapeOptsPreview.scrapeMode === 'mmt-package' ||
       scrapeOptsPreview.scrapeMode === 'mmt-listing-urls' ||
       scrapeOptsPreview.scrapeMode === 'mmt-listing-search' ||
-      scrapeOptsPreview.scrapeMode === 'mmt-listing-first-package'
+      scrapeOptsPreview.scrapeMode === 'mmt-listing-first-package' ||
+      scrapeOptsPreview.scrapeMode === 'mmt-listing'
         ? 180000
         : 45000;
 
@@ -1113,6 +1172,23 @@ async function runScrapeJob(job) {
 
       await emitStatus(job, 'loading', 'Page still loading in background — continuing with visible content');
 
+    }
+
+    if (isListingScrapeMode(scrapeOptsPreview.scrapeMode)) {
+      const readyMs = job.waitMs ?? 4000;
+      const needCollectionTabs =
+        scrapeOptsPreview.scrapeMode === 'mmt-listing-first-package' ||
+        job.extractAllListingTabs === true;
+      note('listing_page_hydrating', { timeoutMs: readyMs, requireCollectionTabs: needCollectionTabs });
+      const readyState = await waitForMmtListingReady(tabId, readyMs, (message) => {
+        void emitStatus(job, 'loading', message);
+      }, { requireCollectionTabs: needCollectionTabs });
+      note('listing_page_ready', {
+        tabCount: readyState?.tabCount ?? 0,
+        cardCount: readyState?.cardCount ?? 0,
+        hydrated: Boolean(readyState?.ready),
+        elapsedMs: readyState ? undefined : readyMs
+      });
     }
 
     await new Promise((r) => setTimeout(r, 1500));
@@ -1154,7 +1230,7 @@ async function runScrapeJob(job) {
         note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
       }
 
-      await streamPackageDetailsFromFirstListing(
+      await streamPackageDetailsFromListing(
         job,
         capture,
         jobDevLog,
@@ -1165,20 +1241,41 @@ async function runScrapeJob(job) {
       return;
     }
 
-    if (job.scrapeMode === 'mmt-listing-search' && job.extractPackageDetail === true) {
+    if (job.scrapeMode === 'mmt-listing-search') {
+      normalizeFirstListingCapture(capture);
+      capture.devLog = { ...(capture.devLog || {}), background: jobDevLog };
+      note('scrape_script_done', {
+        pageType: capture.pageType,
+        listingPackageCount: capture.listingPackages?.length || 0,
+        hasDetailUrl: Boolean(resolveFirstListingPackage(capture)?.detail_url),
+        packageOptions: resolveFirstListingPackage(capture)?.package_options?.length || 0,
+        extractPackageDetail: job.extractPackageDetail === true
+      });
+
+      // Type 3: listing is internal only (find URLs) — do not send listing scrape_result to backend.
+      note('listing_result_skipped', { reason: 'type3_detail_only' });
+
       try {
-        note('listing_tab_closing', { tabId, reason: 'type3_listing_done_opening_package_detail' });
+        note('listing_tab_closing', { tabId, reason: 'type3_listing_done' });
         await chrome.tabs.remove(tabId);
         tabId = null;
       } catch (e) {
         note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
       }
-      await attachPackageDetailsFromListingSearch(
-        job,
-        capture,
-        jobDevLog,
-        (message) => emitStatus(job, 'extracting', message)
-      );
+
+      if (job.extractPackageDetail === true) {
+        await streamPackageDetailsFromListing(
+          job,
+          capture,
+          jobDevLog,
+          (message) => emitStatus(job, 'extracting', message),
+          job.url
+        );
+      } else {
+        jobDevLog.events.push({ type: 'package_detail_skipped', reason: 'extractPackageDetail_false' });
+      }
+      note('job_complete', { ok: true });
+      return;
     }
 
     if (scrapeOptsPreview.scrapeMode === 'mmt-listing' && job.extractAllListingTabs !== true) {
@@ -1206,6 +1303,7 @@ async function runScrapeJob(job) {
 
   } catch (error) {
 
+    jobErrored = true;
     note('error', { message: error.message || String(error) });
     sendBridgeEvent({
 
@@ -1224,7 +1322,7 @@ async function runScrapeJob(job) {
     if (tabId != null) {
 
       try {
-        note('listing_tab_closing', { tabId, reason: 'job_finished' });
+        note('listing_tab_closing', { tabId, reason: jobErrored ? 'job_error' : 'job_finished' });
         await chrome.tabs.remove(tabId);
 
       } catch (e) {

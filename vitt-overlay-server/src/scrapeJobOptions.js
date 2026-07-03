@@ -30,7 +30,7 @@ export function defaultExtractOptions(mode) {
       extractWithFlight: true,
       extractWithoutFlight: true,
       searchPackageName: '',
-      extractPackageDetail: false,
+      extractPackageDetail: mode === 'mmt-listing-search',
       extractItinerary: true,
       extractPolicies: true,
       extractSummary: true,
