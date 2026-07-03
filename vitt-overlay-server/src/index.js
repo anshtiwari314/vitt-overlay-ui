@@ -435,10 +435,10 @@ function scrapeDataFromMessage(msg) {
 }
 
 function onWsMessage(ws, msg) {
-  const routeType = msg?.route_type || msg?.type;
-  if (!routeType) return;
+  const messageType = msg?.type || msg?.route_type;
+  if (!messageType) return;
 
-  switch (routeType) {
+  switch (messageType) {
     case 'client-init':
       wsSend(ws, { type: 'client-init-ack', ok: true, jobs: [] });
       break;

@@ -358,7 +358,9 @@ function showWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
+  let iconPath;
+  if (app.isPackaged) iconPath = path.join(process.resourcesPath, 'build', 'vitt-logo.png');
+  else iconPath = path.join(__dirname, 'build', 'vitt-logo.png');
 
   try {
     tray = new Tray(iconPath);

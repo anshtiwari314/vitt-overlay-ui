@@ -97,6 +97,11 @@
 /* ---------------------------------------------------------------------------
    Header, Status, Controls (same as App4)
    --------------------------------------------------------------------------- */
+.card.app4-card > .app4-header {
+  z-index: 100;
+  overflow: visible;
+}
+
 .app4-header {
   flex-shrink: 0;
   display: flex;
@@ -106,6 +111,7 @@
   padding-bottom: var(--space-2);
   border-bottom: 1px solid transparent;
   -webkit-app-region: drag;
+  position: relative;
 }
 
 .app4-title {
@@ -1076,12 +1082,18 @@
 .win-resize-wrap {
   position: relative;
   display: inline-flex;
+  z-index: 1;
+}
+
+.win-resize-wrap.is-open {
+  z-index: 110;
 }
 
 .win-resize-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: 100%;
   right: 0;
+  margin-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1093,8 +1105,9 @@
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   min-width: 150px;
-  z-index: 50;
+  z-index: 110;
   animation: indicatorIn 0.12s ease-out;
+  pointer-events: auto;
 }
 
 .win-resize-menu-item {

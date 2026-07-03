@@ -11,5 +11,6 @@ capture/
 .claude
 vitt-overlay-electron/**/*.md
 vitt-overlay-react-client/**/*.md
+.cursor/
 *.zip
 captures/

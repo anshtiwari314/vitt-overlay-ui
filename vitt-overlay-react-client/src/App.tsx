@@ -1348,7 +1348,7 @@ export default function App() {
       const msg = payload as Record<string, unknown>
       if (msg.type === 'job_status') {
         sendOnWs({
-          route_type: 'scrape_status',
+          type: 'scrape_status',
           ...scrapeWsContext(),
           'scrape-data': {
             jobId: msg.jobId,
@@ -1389,7 +1389,7 @@ export default function App() {
         }))
       } else if (msg.type === 'scrape_error') {
         sendOnWs({
-          route_type: 'scrape_error',
+          type: 'scrape_error',
           ...scrapeWsContext(),
           'scrape-data': {
             jobId: msg.jobId,
@@ -1413,7 +1413,7 @@ export default function App() {
       const detail = (event as CustomEvent<{ urls: string[]; concurrency?: number }>).detail
       if (!detail?.urls?.length) return
       sendOnWs({
-        route_type: 'request_scrape',
+        type: 'request_scrape',
         ...scrapeWsContext(),
         'scrape-data': {
           urls: detail.urls,

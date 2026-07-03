@@ -289,8 +289,23 @@ export const type5_responsePackageDetail = {
 //   Type 5 — listing devLog + background timeline (listing_result_sent, package_detail_sent)
 //
 // ---------------------------------------------------------------------------
+// WebSocket message types (overlay ↔ server)
+// ---------------------------------------------------------------------------
+//
+// Server → overlay (request):
+//   type: "scrape_request"     — Types 1–5 (flat top-level fields + jobId, url)
+//
+// Overlay → server (response / status):
+//   type: "scrape_status"      — progress (loading / scrolling / extracting)
+//   type: "scrape_result"      — final capture (Type 5: multiple per jobId, use resultPhase)
+//   type: "scrape_error"       — job failed
+//   type: "request_scrape"      — optional batch queue from Scrape tab (urls in scrape-data)
+//
+// Payload: use scrape-data { jobId, url, capture, … } or flat siblings (server accepts both).
+//
+// ---------------------------------------------------------------------------
 // WRONG — do not send
 // ---------------------------------------------------------------------------
 //
-// { "route_type": "request_scrape", "scrape-data": { ... } }  — legacy, disabled
+// route_type (legacy — use type instead)
 // Missing type or jobId

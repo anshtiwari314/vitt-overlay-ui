@@ -19,6 +19,7 @@
     "@fortawesome/free-solid-svg-icons": "^7.1.0",
     "@reduxjs/toolkit": "^2.9.0",
     "@ricky0123/vad-react": "^0.0.30",
+    "axios": "^1.18.1",
     "dotenv": "^17.2.3",
     "electron-context-menu": "^4.0.4",
     "html-react-parser": "^5.2.16",
