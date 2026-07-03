@@ -78,6 +78,15 @@ function getMeetingPlatformLabel(platform?: string | null) {
   return platform.charAt(0).toUpperCase() + platform.slice(1)
 }
 
+/** Same room id used for scrape, room-update, client-init, and data tab edits. */
+function resolveOverlayRoomId(
+  activeMeetingId: string | null | undefined,
+  meetings: { id: string }[],
+  userid: string
+): string {
+  return activeMeetingId ?? meetings[0]?.id ?? userid ?? ''
+}
+
 /** Single shared WebSocket for the app so only one connection exists. */
 let appSharedWs: WebSocket | null = null
 
@@ -823,6 +832,10 @@ export default function App() {
   const meetingSessionIdsRef = useRef<Record<string, string>>({})
   const sessionuidRef = useRef(fallbackSessionIdRef.current)
   const [activeSessionId, setActiveSessionId] = useState(fallbackSessionIdRef.current)
+  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string; title?: string }[]>([])
+  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
+  const activeMeetingIdRef = useRef(activeMeetingId)
+  const meetingsRef = useRef(meetings)
 
   const focusedFieldIdRef = useRef<string | null>(null)
   const lastSentDataRef = useRef<string>('')
@@ -843,12 +856,19 @@ export default function App() {
         if (currentDataStr !== lastSentDataRef.current) {
           const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
           if (ws?.readyState === WebSocket.OPEN) {
+            const roomId = resolveOverlayRoomId(
+              activeMeetingIdRef.current,
+              meetingsRef.current,
+              currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
+            )
             ws.send(
               JSON.stringify({
                 type: 'data-info-update-req',
                 source: currentUserRef.current?.source ?? '',
                 userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
                 sessionid: sessionuidRef.current ?? '',
+                roomId,
+                roomid: roomId,
                 data_info: updated,
                 timestamp: getTimeStamp()
               })
@@ -885,8 +905,6 @@ export default function App() {
   const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
   const [isSuggesting, setIsSuggesting] = useState(false)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [meetings, setMeetings] = useState<{ id: string; platform: string; url?: string; title?: string }[]>([])
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
   const prevMeetingsCountRef = useRef(0)
   const [copyToast, setCopyToast] = useState(false)
   const [actionToast, setActionToast] = useState<{ message: string; error?: boolean } | null>(null)
@@ -898,8 +916,6 @@ export default function App() {
   const recordingMeetingId = activeMeetingId ?? meetings[0]?.id ?? null
   const connectionSessionId =
     currentUser?.sessionuid ?? fallbackSessionIdRef.current
-  const activeMeetingIdRef = useRef(activeMeetingId)
-  const meetingsRef = useRef(meetings)
 
   useEffect(() => {
     activeMeetingIdRef.current = activeMeetingId
@@ -912,6 +928,11 @@ export default function App() {
   const sendClientInit = (ws: WebSocket) => {
     const initUserid =
       currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
+    const roomId = resolveOverlayRoomId(
+      activeMeetingIdRef.current,
+      meetingsRef.current,
+      initUserid
+    )
     ws.send(
       JSON.stringify({
         type: 'client-init',
@@ -919,7 +940,8 @@ export default function App() {
         source: currentUserRef.current?.source ?? '',
         userid: initUserid,
         sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
-        roomId: initUserid,
+        roomId,
+        roomid: roomId,
         timestamp: getTimeStamp()
       })
     )
@@ -937,7 +959,7 @@ export default function App() {
     }
   }, [wsUrl, source, userid, connectionSessionId])
 
-  const effectiveRoomId = activeMeetingId ?? meetings[0]?.id ?? ''
+  const effectiveRoomId = resolveOverlayRoomId(activeMeetingId, meetings, userid)
 
   useEffect(() => {
     console.log(
@@ -1324,18 +1346,21 @@ export default function App() {
       overlay?: { onScrapeBridgeEvent?: (cb: (payload: unknown) => void) => () => void }
     }).overlay
 
-    const scrapeWsContext = () => ({
-      source: currentUserRef.current?.source ?? '',
-      userid:
-        currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
-      sessionid: sessionuidRef.current ?? '',
-      roomId:
-        activeMeetingIdRef.current ??
-        meetingsRef.current[0]?.id ??
-        currentUserRef.current?.userid ??
-        currentUserRef.current?.id ??
-        ''
-    })
+    const scrapeWsContext = () => {
+      const uid =
+        currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
+      const roomId = resolveOverlayRoomId(
+        activeMeetingIdRef.current,
+        meetingsRef.current,
+        uid
+      )
+      return {
+        source: currentUserRef.current?.source ?? '',
+        userid: uid,
+        sessionid: sessionuidRef.current ?? '',
+        roomId
+      }
+    }
 
     const sendOnWs = (payload: Record<string, unknown>) => {
       const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
@@ -1442,6 +1467,7 @@ export default function App() {
         source: currentUserRef.current?.source ?? '',
         userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
         sessionid: sessionuidRef.current ?? '',
+        roomId: effectiveRoomId,
         roomid: effectiveRoomId,
         timestamp: getTimeStamp()
       })
