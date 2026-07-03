@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Vitt Page Capture settings</title>
+    <link rel="stylesheet" href="ui.css">
+  </head>
+  <body class="options">
+    <main class="card">
+      <div class="brand"><span class="mark">V</span><div><strong>Connection settings</strong><small>Vitt Page Capture</small></div></div>
+
+      <h2 class="section-title">Manual capture (popup button)</h2>
+      <label class="field">Vitt overlay server<input id="serverUrl" type="url" spellcheck="false" placeholder="http://127.0.0.1:5000"></label>
+      <label class="field">Local pairing token<input id="localToken" type="password" spellcheck="false"></label>
+      <p class="hint">Capture and send routes through the Vitt Overlay Electron bridge → React → server. The overlay app must be running with Chrome launched from it. Token below is only used if you call <code>POST /api/capture</code> directly.</p>
+
+      <h2 class="section-title">Automated scrape (overlay queue)</h2>
+      <label class="field">Electron bridge WebSocket<input id="bridgeUrl" type="url" spellcheck="false" placeholder="ws://127.0.0.1:38772"></label>
+      <label class="field">Parallel tabs<input id="concurrency" type="number" min="1" max="8" value="3"></label>
+      <p class="hint">Used when the overlay queues URLs for scroll-and-extract jobs. Connects to Electron over WebSocket (instant push, no polling).</p>
+
+      <button id="save" type="button">Save settings</button>
+      <div id="status" class="status" role="status"></div>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

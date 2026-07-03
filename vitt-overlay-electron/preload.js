@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('overlay', {
   },
   quitApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
+  setMousePassthrough: (ignore) => ipcRenderer.send('overlay-set-mouse-ignore', ignore),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   resizeWindow: (payload) => ipcRenderer.send('resize-window', payload),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
@@ -35,6 +36,24 @@ contextBridge.exposeInMainWorld('overlay', {
     const subscription = (_event, data) => cb(data);
     ipcRenderer.on('window-resized', subscription);
     return () => ipcRenderer.removeListener('window-resized', subscription);
+  },
+  launchBrowserExtension: (url) => ipcRenderer.invoke('launch-browser-extension', url),
+  getScrapeServerInfo: () => ipcRenderer.invoke('get-scrape-server-info'),
+  scrapeStart: (job) => ipcRenderer.invoke('scrape-start', job),
+  getExtensionBridgeUrl: () => ipcRenderer.invoke('get-extension-bridge-url'),
+  getExtensionBridgeStatus: () => ipcRenderer.invoke('get-extension-bridge-status'),
+  onExtensionBridgeStatus: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('extension-bridge-status', subscription);
+    return () => ipcRenderer.removeListener('extension-bridge-status', subscription);
+  },
+  sendExtensionCommand: (payload) => ipcRenderer.invoke('extension-send-command', payload),
+  getExtensionPath: () => ipcRenderer.invoke('get-extension-path'),
+  revealExtensionFolder: () => ipcRenderer.invoke('reveal-extension-folder'),
+  onScrapeBridgeEvent: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('scrape-bridge-event', subscription);
+    return () => ipcRenderer.removeListener('scrape-bridge-event', subscription);
   }
 });
 

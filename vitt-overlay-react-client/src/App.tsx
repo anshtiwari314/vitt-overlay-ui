@@ -14,15 +14,14 @@ import {
   Copy,
   Database,
   FileText,
-  LayoutDashboard,
   Link2,
   Loader2,
   LogOut,
   Mic,
   Minus,
   Pause,
-  Settings,
   RefreshCw,
+  Settings,
   Sparkles,
   SunMedium,
   SunMoon,
@@ -36,6 +35,16 @@ import { useAuth } from './context/AuthContext'
 import { getTimeStamp } from './functions/generalFn'
 import { useServerUrl } from './context/ServerUrlContext'
 import WindowResizeButton from './components/WindowResizeButton'
+// import ScrapePanel from './components/ScrapePanel'
+import ActionToast from './components/ActionToast'
+import {
+  SCRAPE_JOB_UPDATE_EVENT,
+  SCRAPE_LAST_EVENT,
+  SCRAPE_QUEUE_EVENT
+} from './functions/scrapeServer'
+import { minimizeOverlayWindow, quitOverlayWindow } from './functions/overlayWindow'
+import { useOverlayInteraction } from './hooks/useOverlayInteraction'
+import { useExtensionBridgeStatus } from './hooks/useExtensionBridgeStatus'
 import GMeetIcon from './assets/g-meet.png'
 import ZoomIcon from './assets/zoom.png'
 import TeamsIcon from './assets/teams.png'
@@ -551,7 +560,6 @@ function SettingsTab({
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
-  const displayEmail = currentUser?.email ?? 'N/A'
   const displayRole = currentUser?.role ?? 'N/A'
 
   return (
@@ -561,10 +569,6 @@ function SettingsTab({
         <div className="setting-row">
           <span className="setting-label">Name</span>
           <span className="setting-value">{displayName}</span>
-        </div>
-        <div className="setting-row">
-          <span className="setting-label">Email</span>
-          <span className="setting-value">{displayEmail}</span>
         </div>
         <div className="setting-row">
           <span className="setting-label">User ID</span>
@@ -804,6 +808,7 @@ export default function App() {
   const [transparency, setTransparency] = useState(85)
   const [currentTime, setCurrentTime] = useState('')
   const [isServerConnected, setIsServerConnected] = useState(false)
+  const extensionConnected = useExtensionBridgeStatus()
   const [dataInfoItems, setDataInfoItems] = useState<DataInfoField[]>([])
   const [sdkState, setSdkState] = useState({
     recording: false,
@@ -884,6 +889,10 @@ export default function App() {
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
   const prevMeetingsCountRef = useRef(0)
   const [copyToast, setCopyToast] = useState(false)
+  const [actionToast, setActionToast] = useState<{ message: string; error?: boolean } | null>(null)
+  const actionToastTimerRef = useRef<number | null>(null)
+
+  useOverlayInteraction()
   const userid = (currentUser as { userid?: string; id?: string })?.userid ?? (currentUser as { id?: string })?.id ?? ''
   const source = (currentUser as { source?: string })?.source ?? currentUserRef.current?.source ?? ''
   const recordingMeetingId = activeMeetingId ?? meetings[0]?.id ?? null
@@ -901,15 +910,16 @@ export default function App() {
   }, [meetings])
 
   const sendClientInit = (ws: WebSocket) => {
-    const roomId = activeMeetingIdRef.current ?? meetingsRef.current[0]?.id ?? ''
+    const initUserid =
+      currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
     ws.send(
       JSON.stringify({
         type: 'client-init',
         message: 'Hello from browser!',
         source: currentUserRef.current?.source ?? '',
-        userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+        userid: initUserid,
         sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
-        roomId,
+        roomId: initUserid,
         timestamp: getTimeStamp()
       })
     )
@@ -1201,6 +1211,81 @@ export default function App() {
 
             window.dispatchEvent(new CustomEvent('chat-response-received'))
           }
+
+          /* --- Page scrape (additive; overlay handlers above unchanged) --- */
+          if (result.type === 'scrape_request') {
+            const job = {
+              jobId: result.jobId as string,
+              url: result.url as string,
+              scrollUntilStable: result.scrollUntilStable !== false,
+              selector: (result.selector as string | null) ?? null,
+              waitMs: (result.waitMs as number) ?? 4000,
+              scrapeMode: (result.scrapeMode as string) ?? undefined,
+              extractWithFlight: result.extractWithFlight as boolean | undefined,
+              extractWithoutFlight: result.extractWithoutFlight as boolean | undefined,
+              searchPackageName: (result.searchPackageName as string) ?? undefined,
+              extractItinerary: result.extractItinerary as boolean | undefined,
+              extractPolicies: result.extractPolicies as boolean | undefined,
+              extractSummary: result.extractSummary as boolean | undefined,
+              extractHotels: result.extractHotels as boolean | undefined,
+              extractActivities: result.extractActivities as boolean | undefined,
+              extractTransfers: result.extractTransfers as boolean | undefined,
+              maxSidebarClicks: result.maxSidebarClicks as number | undefined,
+              extractAllListingTabs: result.extractAllListingTabs as boolean | undefined,
+              extractPackageDetail: result.extractPackageDetail as boolean | undefined,
+              packageDetailWaitMs: result.packageDetailWaitMs as number | undefined,
+              listingTabName: (result.listingTabName as string) ?? undefined,
+              minPackageCards: (result.minPackageCards as number) ?? undefined,
+              status: 'queued' as const,
+              message: 'Queued — waiting for Chrome extension'
+            }
+            window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+              detail: {
+                jobId: job.jobId,
+                url: job.url,
+                status: 'queued',
+                message: job.message
+              }
+            }))
+            const overlay = (window as Window & {
+              overlay?: { scrapeStart?: (j: typeof job) => Promise<{ ok?: boolean; error?: string }> }
+            }).overlay
+            if (!overlay?.scrapeStart) {
+              window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+                detail: {
+                  jobId: job.jobId,
+                  url: job.url,
+                  status: 'error',
+                  message: 'Extension bridge unavailable — run Electron and launch Chrome + Extension',
+                  error: 'Extension bridge unavailable — run Electron and launch Chrome + Extension'
+                }
+              }))
+            } else {
+              void overlay.scrapeStart(job).then((res) => {
+                if (res?.ok === false) {
+                  window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+                    detail: {
+                      jobId: job.jobId,
+                      url: job.url,
+                      status: 'error',
+                      message: res.error || 'Failed to forward job to extension',
+                      error: res.error || 'Failed to forward job to extension'
+                    }
+                  }))
+                }
+              })
+            }
+          }
+
+          if (result.type === 'job_update' && result.job && typeof result.job === 'object') {
+            window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, { detail: result.job }))
+          }
+
+          if (result.type === 'capture_received') {
+            window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
+              detail: `Manual capture saved: ${result.title || result.url || 'page'}`
+            }))
+          }
         } catch {
           /* ignore non-json */
         }
@@ -1235,6 +1320,119 @@ export default function App() {
   }, [socketUrl, wsRef])
 
   useEffect(() => {
+    const overlay = (window as unknown as {
+      overlay?: { onScrapeBridgeEvent?: (cb: (payload: unknown) => void) => () => void }
+    }).overlay
+
+    const scrapeWsContext = () => ({
+      source: currentUserRef.current?.source ?? '',
+      userid:
+        currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+      sessionid: sessionuidRef.current ?? '',
+      roomId:
+        activeMeetingIdRef.current ??
+        meetingsRef.current[0]?.id ??
+        currentUserRef.current?.userid ??
+        currentUserRef.current?.id ??
+        ''
+    })
+
+    const sendOnWs = (payload: Record<string, unknown>) => {
+      const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload))
+      }
+    }
+
+    const onBridge = (payload: unknown) => {
+      const msg = payload as Record<string, unknown>
+      if (msg.type === 'job_status') {
+        sendOnWs({
+          type: 'scrape_status',
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: msg.status,
+            message: msg.message
+          }
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+          detail: {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: msg.status,
+            message: msg.message
+          }
+        }))
+        window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
+          detail: `${msg.status}: ${msg.url}`
+        }))
+      } else if (msg.type === 'scrape_result') {
+        sendOnWs({
+          type: 'scrape_result',
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            pageType: msg.pageType,
+            resultPhase: msg.resultPhase,
+            url: msg.url,
+            extractedUrl: msg.extractedUrl ?? msg.url,
+            source: msg.source,
+            capture: msg.capture
+          }
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_LAST_EVENT, {
+          detail: msg.source === 'extension-popup'
+            ? `Manual capture saved: ${msg.url}`
+            : `Extracted ${msg.url}`
+        }))
+      } else if (msg.type === 'scrape_error') {
+        sendOnWs({
+          type: 'scrape_error',
+          ...scrapeWsContext(),
+          'scrape-data': {
+            jobId: msg.jobId,
+            url: msg.url,
+            error: msg.error
+          }
+        })
+        window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
+          detail: {
+            jobId: msg.jobId,
+            url: msg.url,
+            status: 'error',
+            message: msg.error,
+            error: msg.error
+          }
+        }))
+      }
+    }
+
+    const onQueue = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[]; concurrency?: number }>).detail
+      if (!detail?.urls?.length) return
+      sendOnWs({
+        type: 'request_scrape',
+        ...scrapeWsContext(),
+        'scrape-data': {
+          urls: detail.urls,
+          scrollUntilStable: true,
+          concurrency: detail.concurrency ?? 3
+        }
+      })
+    }
+
+    const unsubBridge = overlay?.onScrapeBridgeEvent?.(onBridge)
+    window.addEventListener(SCRAPE_QUEUE_EVENT, onQueue)
+
+    return () => {
+      unsubBridge?.()
+      window.removeEventListener(SCRAPE_QUEUE_EVENT, onQueue)
+    }
+  }, [wsRef])
+
+  useEffect(() => {
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
     if (ws?.readyState !== WebSocket.OPEN) return
 
@@ -1244,7 +1442,7 @@ export default function App() {
         source: currentUserRef.current?.source ?? '',
         userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
         sessionid: sessionuidRef.current ?? '',
-        roomId: effectiveRoomId,
+        roomid: effectiveRoomId,
         timestamp: getTimeStamp()
       })
     )
@@ -1279,21 +1477,13 @@ export default function App() {
   }, [])
 
   const closeApp = () => {
-    const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
-    if (overlay?.quitApp) {
-      overlay.quitApp()
-      return
-    }
-    recallElectronAPI?.send('close-app', undefined)
+    if (quitOverlayWindow()) return
+    showActionToast('Close is only available in the Electron app. Run: cd vitt-overlay-electron && npm start', true)
   }
 
   const minimizeApp = () => {
-    const overlay = (window as unknown as { overlay?: { minimizeApp?: () => void } }).overlay
-    if (overlay?.minimizeApp) {
-      overlay.minimizeApp()
-      return
-    }
-    recallElectronAPI?.send('minimize-app', undefined)
+    if (minimizeOverlayWindow()) return
+    showActionToast('Minimize is only available in the Electron app. Run: cd vitt-overlay-electron && npm start', true)
   }
 
   const openExternal = (url: string) => {
@@ -1311,8 +1501,24 @@ export default function App() {
     document.body.style.backgroundColor = 'transparent'
   }
 
-  const openDashboard = () => {
-    openExternal('http://vitt-health-insurance.netlify.app/')
+  const showActionToast = (message: string, error = false) => {
+    if (actionToastTimerRef.current) {
+      clearTimeout(actionToastTimerRef.current)
+      actionToastTimerRef.current = null
+    }
+    setActionToast({ message, error })
+    actionToastTimerRef.current = window.setTimeout(() => {
+      setActionToast(null)
+      actionToastTimerRef.current = null
+    }, error ? 12000 : 5000)
+  }
+
+  const dismissActionToast = () => {
+    if (actionToastTimerRef.current) {
+      clearTimeout(actionToastTimerRef.current)
+      actionToastTimerRef.current = null
+    }
+    setActionToast(null)
   }
 
   const handleTabSelect = (tab: string) => {
@@ -1451,33 +1657,30 @@ export default function App() {
   }
 
   return (
-    <div className="drag-region">
+    <div>
       <div
-        className="card app4-card drag-region"
+        className="card app4-card"
         id="card"
         data-theme={theme}
         style={{ ['--bg-opacity' as string]: transparency / 100 }}
       >
-        <div className="app4-header drag-region">
-          <div className="app4-title">
+        <div className="app4-header">
+          <div className="app4-title no-drag">
             <span className="dot" />
             <span>Vitt Overlay</span>
           </div>
           <div className="app4-actions no-drag">
-            <button type="button" className="btn-icon" onClick={openDashboard} title="Dashboard">
-              <LayoutDashboard size={18} />
-            </button>
             <button type="button" className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
               {theme === 'dark' ? <SunMedium size={18} /> : <SunMoon size={18} />}
             </button>
             <button type="button" className={`btn-icon ${selectedTab === 'settings' ? 'active' : ''}`} onClick={() => handleTabSelect('settings')} title="Settings">
               <Settings size={18} />
             </button>
-            <button type="button" className="btn-icon" onClick={minimizeApp} title="Minimize">
+            <button type="button" className="btn-icon" onClick={minimizeApp} onMouseDown={(e) => e.stopPropagation()} title="Minimize">
               <Minus size={18} />
             </button>
             <WindowResizeButton />
-            <button type="button" className="btn-icon danger" onClick={closeApp} title="Quit">
+            <button type="button" className="btn-icon danger" onClick={closeApp} onMouseDown={(e) => e.stopPropagation()} title="Quit">
               <X size={18} />
             </button>
           </div>
@@ -1541,14 +1744,17 @@ export default function App() {
           return null
         })()}
 
-        <div className="no-drag" style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
+        <div style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="no-drag">
             <div style={{ color: 'rgba(255,255,255,0.75)', marginBottom: 2 }}>{currentTime}</div>
-            <div style={{ color: isServerConnected ? '#22c55e' : '#ef4444' }}>
+            <div style={{ color: extensionConnected ? '#22c55e' : '#ef4444' }}>
+              {extensionConnected ? 'Browser Connected' : 'Browser disconnected'}
+            </div>
+            <div style={{ color: isServerConnected ? '#22c55e' : '#ef4444', marginTop: 2 }}>
               {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
             </div>
           </div>
-          <div className="prompt-actions">
+          <div className="prompt-actions no-drag">
             <button type="button" className="prompt-trigger-btn prompt-trigger-btn-secondary" onClick={triggerRefresh}>
               <RefreshCw size={13} style={{ marginRight: 4 }} />
               Refresh
@@ -1560,7 +1766,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="status-section no-drag" />
+        <div className="status-section" />
 
         {selectedTab !== 'settings' && (
           <div className="controls-section no-drag">
@@ -1617,6 +1823,7 @@ export default function App() {
               onCopy={copyToClipboard}
             />
           )}
+          {/* {selectedTab === 'scrape' && <ScrapePanel serverConnected={isServerConnected} />} */}
           {selectedTab === 'settings' && (
             <SettingsTab
               transparency={transparency}
@@ -1634,10 +1841,22 @@ export default function App() {
           <TabButton active={selectedTab === 'chat'} onClick={() => handleTabSelect('chat')} icon={<BotMessageSquare size={18} />} label="AI Chat" hasUnread={unreadTabs.has('chat')} />
           <TabButton active={selectedTab === 'prompts'} onClick={() => handleTabSelect('prompts')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('prompts')} />
           <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
+          {/* <TabButton active={selectedTab === 'scrape'} onClick={() => handleTabSelect('scrape')} icon={<Globe size={18} />} label="Scrape" /> */}
         </div>
 
         <div className="toast-container">
           <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
+          {actionToast ? (
+            <ActionToast
+              message={actionToast.message}
+              error={actionToast.error}
+              onDismiss={dismissActionToast}
+              onCopied={() => {
+                setCopyToast(true)
+                window.setTimeout(() => setCopyToast(false), 1500)
+              }}
+            />
+          ) : null}
         </div>
 
         <div className="bottom-hint no-drag">
@@ -1662,7 +1881,12 @@ function TabButton({
   hasUnread?: boolean
 }) {
   return (
-    <button type="button" className={`tab-btn ${active ? 'active' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      className={`tab-btn ${active ? 'active' : ''}`}
+      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <span className="tab-icon-wrap">
         {icon}
         {hasUnread && !active && <span className="tab-unread-dot" />}

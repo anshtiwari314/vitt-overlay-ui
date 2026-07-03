@@ -19,7 +19,7 @@ const WINDOW_SIZE_PRESETS: { label: string; widthPct?: number; heightPct?: numbe
 export default function WindowResizeButton() {
   const [open, setOpen] = useState(false)
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   const overlay = (window as unknown as { overlay?: OverlayBridge }).overlay
 
@@ -33,47 +33,49 @@ export default function WindowResizeButton() {
     }
   }, [overlay])
 
-  const cancelClose = () => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
+  useEffect(() => {
+    if (!open) return
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
     }
-  }
 
-  const scheduleClose = () => {
-    cancelClose()
-    closeTimerRef.current = setTimeout(() => setOpen(false), 150)
-  }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
 
-  const onClick = () => {
-    overlay?.toggleFullscreen?.()
-    setOpen(false)
-  }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  const toggleMenu = () => setOpen((prev) => !prev)
 
   const applyPreset = (p: typeof WINDOW_SIZE_PRESETS[0]) => {
     overlay?.resizeWindow?.({ widthPct: p.widthPct, heightPct: p.heightPct, width: p.width, height: p.height })
     setOpen(false)
   }
 
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
-
   return (
-    <div
-      className="win-resize-wrap"
-      onMouseEnter={() => { cancelClose(); setOpen(true) }}
-      onMouseLeave={scheduleClose}
-    >
-      <button type="button" className="btn-icon" onClick={onClick} title="Resize / Fullscreen">
+    <div ref={wrapRef} className={`win-resize-wrap${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className={`btn-icon${open ? ' active' : ''}`}
+        onClick={toggleMenu}
+        onMouseDown={(e) => e.stopPropagation()}
+        title="Overlay size"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
         <Maximize2 size={18} />
       </button>
       {open && (
-        <div
-          className="win-resize-menu"
-          onMouseEnter={cancelClose}
-          onMouseLeave={scheduleClose}
-        >
+        <div className="win-resize-menu" role="menu">
           {size && (
             <>
               <div className="win-resize-menu-item" style={{ cursor: 'default', background: 'transparent' }}>
@@ -88,6 +90,7 @@ export default function WindowResizeButton() {
               type="button"
               key={p.label}
               className="win-resize-menu-item"
+              role="menuitem"
               onClick={() => applyPreset(p)}
             >
               <span>{p.label}</span>
@@ -102,7 +105,11 @@ export default function WindowResizeButton() {
           <button
             type="button"
             className="win-resize-menu-item"
-            onClick={() => { overlay?.toggleFullscreen?.(); setOpen(false) }}
+            role="menuitem"
+            onClick={() => {
+              overlay?.toggleFullscreen?.()
+              setOpen(false)
+            }}
           >
             <span>Fullscreen</span>
             <span className="dim">toggle</span>
