@@ -12,6 +12,8 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useServerUrl } from '../context/ServerUrlContext'
 import WindowResizeButton from '../components/WindowResizeButton'
+import { minimizeOverlayWindow, quitOverlayWindow } from '../functions/overlayWindow'
+import { useOverlayInteraction } from '../hooks/useOverlayInteraction'
 import {
   normalizeWebSocketUrl,
   wsUrlToHttpOrigin
@@ -46,6 +48,8 @@ export default function Login3() {
   const [activeProbeUrl, setActiveProbeUrl] = useState<string>('')
   const probeRef = useRef<WebSocket | null>(null)
   const probeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useOverlayInteraction()
 
   const normalizedUrl = useMemo(() => normalizeWebSocketUrl(wsUrlDraft), [wsUrlDraft])
 
@@ -190,27 +194,13 @@ export default function Login3() {
   }
 
   const closeApp = () => {
-    const overlay = (window as unknown as { overlay?: { quitApp?: () => void } }).overlay
-    if (overlay?.quitApp) {
-      overlay.quitApp()
-      return
-    }
-    const electronAPI = (window as unknown as {
-      electronAPI?: { ipcRenderer: { send: (c: string, p: unknown) => void } }
-    }).electronAPI
-    electronAPI?.ipcRenderer?.send('close-app', undefined)
+    if (quitOverlayWindow()) return
+    setError('Close is only available in the Electron app. Run: cd vitt-overlay-electron && npm start')
   }
 
   const minimizeApp = () => {
-    const overlay = (window as unknown as { overlay?: { minimizeApp?: () => void } }).overlay
-    if (overlay?.minimizeApp) {
-      overlay.minimizeApp()
-      return
-    }
-    const electronAPI = (window as unknown as {
-      electronAPI?: { ipcRenderer: { send: (c: string, p: unknown) => void } }
-    }).electronAPI
-    electronAPI?.ipcRenderer?.send('minimize-app', undefined)
+    if (minimizeOverlayWindow()) return
+    setError('Minimize is only available in the Electron app. Run: cd vitt-overlay-electron && npm start')
   }
 
   const connStateLabel: Record<ConnState, string> = {
