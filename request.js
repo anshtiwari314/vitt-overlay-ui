@@ -27,6 +27,7 @@
  *   VITT_TYPE1_EXTRACT_ALL_LISTING_TABS
  *   VITT_TYPE1_WAIT_MS
  *   VITT_PACKAGE_SCRAPE_URL
+ *   VITT_TYPE4_CLOSE_DETAIL_TAB   (default true; set false to keep Type 4 detail tabs open)
  *
  * Examples below mirror TYPE1–TYPE5 in vitt-overlay-server/src/index.js
  * (same fields the server sends after mergeJobOptions).
@@ -141,10 +142,9 @@ export const type3_listingSearchWithPackageDetail = {
   extractActivities: false,
   extractTransfers: false,
   maxSidebarClicks: 8,
-  packageDetailWaitMs: 2500
+  packageDetailWaitMs: 2500,
+  closeDetailTabAfterScrape: false // false = keep Type 4 detail tab(s) open; omit/true = close after scrape
 };
-
-/** Type 3 does not send a listing scrape_result — only package_detail (same shape as Type 5 detail). */
 export const type3_responsePackageDetail = {
   type: 'scrape_result',
   jobId: exampleJobId,
@@ -171,6 +171,7 @@ export const type4_packageDetail = {
   scrapeMode: 'mmt-package',
   scrollUntilStable: false,
   waitMs: 2500,
+  closeDetailTabAfterScrape: true, // false = leave detail tab open after scrape (Type 3/5 inherit this)
   extractItinerary: true,
   extractPolicies: true,
   extractSummary: true,
@@ -206,6 +207,7 @@ export const type5_firstPackageDetail = {
   extractWithFlight: true,
   extractWithoutFlight: true,
   packageDetailWaitMs: 2500,
+  closeDetailTabAfterScrape: false,
   extractItinerary: true,
   extractPolicies: false,
   extractSummary: false,
@@ -277,6 +279,10 @@ export const type5_responsePackageDetail = {
 //
 // Common (listing 1–3, 5):
 //   scrollUntilStable, waitMs, selector, cardSelector
+//
+// Type 3 / Type 5 (internal Type 4 chain):
+//   closeDetailTabAfterScrape  default true; false = leave detail tab(s) open after scrape
+//   packageDetailWaitMs        default 2500
 //
 // Type 5 request:
 //   minPackageCards           default 4 (wait after single scroll; still uses first card if fewer)

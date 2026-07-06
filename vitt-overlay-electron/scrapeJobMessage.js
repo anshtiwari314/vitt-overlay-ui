@@ -22,6 +22,8 @@ export function scrapeJobMessage(job) {
     listingTabName: job.listingTabName || null,
     extractPackageDetail: job.extractPackageDetail === true,
     packageDetailWaitMs: job.packageDetailWaitMs ?? null,
+    // Always send explicit boolean so false survives JSON/IPC (undefined would default to close).
+    closeDetailTabAfterScrape: job.closeDetailTabAfterScrape === false ? false : true,
     minPackageCards: job.minPackageCards ?? 4
   };
 }

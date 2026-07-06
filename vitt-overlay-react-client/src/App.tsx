@@ -1256,6 +1256,8 @@ export default function App() {
               extractAllListingTabs: result.extractAllListingTabs as boolean | undefined,
               extractPackageDetail: result.extractPackageDetail as boolean | undefined,
               packageDetailWaitMs: result.packageDetailWaitMs as number | undefined,
+              closeDetailTabAfterScrape:
+                result.closeDetailTabAfterScrape === false ? false : true,
               listingTabName: (result.listingTabName as string) ?? undefined,
               minPackageCards: (result.minPackageCards as number) ?? undefined,
               status: 'queued' as const,

@@ -181,6 +181,13 @@ function devLog(tag, detail = {}) {
   console.log('[vitt-dev]', tag, JSON.stringify({ ts: new Date().toISOString(), ...detail }));
 }
 
+/** Type 4 detail tab: close after scrape unless job sets closeDetailTabAfterScrape: false. */
+function shouldCloseDetailTabAfterScrape(job) {
+  const value = job?.closeDetailTabAfterScrape;
+  if (value === false || value === 'false' || value === 0 || value === '0') return false;
+  return true;
+}
+
 function deliverInterceptResult(openerTabId, url, reason) {
   devLog('intercept_result', { openerTabId, reason, url: url ? url.slice(0, 120) : null });
   chrome.tabs.sendMessage(openerTabId, { channel: 'intercept_result', url: url || null, reason }).catch(() => {});
@@ -941,13 +948,15 @@ function collectPackageDetailTargets(listingPkg, job) {
 
 async function runPackageDetailScrape(parentJob, target, onProgress) {
   let tabId = null;
+  const keepDetailTabOpen = !shouldCloseDetailTabAfterScrape(parentJob);
   try {
     const packageJob = {
       ...parentJob,
       url: target.detail_url,
       scrapeMode: 'mmt-package',
       waitMs: parentJob.packageDetailWaitMs ?? 2500,
-      flightType: target.flight_type || target.variant || 'default'
+      flightType: target.flight_type || target.variant || 'default',
+      closeDetailTabAfterScrape: keepDetailTabOpen ? false : true
     };
 
     if (onProgress) {
@@ -970,10 +979,25 @@ async function runPackageDetailScrape(parentJob, target, onProgress) {
     });
   } finally {
     if (tabId != null) {
-      try {
-        await chrome.tabs.remove(tabId);
-      } catch {
-        /* ignore */
+      if (keepDetailTabOpen) {
+        devLog('detail_tab_kept_open', {
+          tabId,
+          detail_url: target.detail_url?.slice(0, 120),
+          closeDetailTabAfterScrape: parentJob?.closeDetailTabAfterScrape,
+          parentScrapeMode: parentJob?.scrapeMode || null
+        });
+      } else {
+        try {
+          devLog('detail_tab_closing', {
+            tabId,
+            detail_url: target.detail_url?.slice(0, 120),
+            closeDetailTabAfterScrape: parentJob?.closeDetailTabAfterScrape,
+            parentScrapeMode: parentJob?.scrapeMode || null
+          });
+          await chrome.tabs.remove(tabId);
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
@@ -999,6 +1023,8 @@ async function streamPackageDetailsFromListing(job, capture, jobDevLog, onProgre
   jobDevLog.events.push({
     type: 'package_detail_targets',
     count: targets.length,
+    closeDetailTabAfterScrape: job.closeDetailTabAfterScrape,
+    willCloseDetailTabs: shouldCloseDetailTabAfterScrape(job),
     targets: targets.map((t) => ({ flight_type: t.flight_type, detail_url: t.detail_url.slice(0, 120) }))
   });
 
@@ -1116,7 +1142,12 @@ async function runScrapeJob(job) {
 
   try {
 
-    note('started', { url: job.url, scrapeMode: job.scrapeMode, extractAllListingTabs: job.extractAllListingTabs === true });
+    note('started', {
+      url: job.url,
+      scrapeMode: job.scrapeMode,
+      extractAllListingTabs: job.extractAllListingTabs === true,
+      closeDetailTabAfterScrape: job.closeDetailTabAfterScrape
+    });
     await emitStatus(job, 'loading', `Opening ${job.url}`);
 
     const scrapeOptsPreview = buildScrapeOpts(job);
@@ -1320,17 +1351,23 @@ async function runScrapeJob(job) {
   } finally {
 
     if (tabId != null) {
+      const isPackageDetailJob = buildScrapeOpts(job).scrapeMode === 'mmt-package';
+      const shouldClose = !isPackageDetailJob || shouldCloseDetailTabAfterScrape(job);
 
-      try {
-        note('listing_tab_closing', { tabId, reason: jobErrored ? 'job_error' : 'job_finished' });
-        await chrome.tabs.remove(tabId);
-
-      } catch (e) {
-
-        note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
-
+      if (shouldClose) {
+        try {
+          note('listing_tab_closing', {
+            tabId,
+            reason: jobErrored ? 'job_error' : 'job_finished',
+            scrapeMode: job.scrapeMode || 'unknown'
+          });
+          await chrome.tabs.remove(tabId);
+        } catch (e) {
+          note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
+        }
+      } else {
+        note('detail_tab_kept_open', { tabId, reason: 'closeDetailTabAfterScrape_false' });
       }
-
     }
 
   }

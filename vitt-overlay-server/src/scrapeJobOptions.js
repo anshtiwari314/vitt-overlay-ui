@@ -13,6 +13,7 @@ export function defaultExtractOptions(mode) {
       scrapeMode: 'mmt-package',
       scrollUntilStable: false,
       waitMs: 2500,
+      closeDetailTabAfterScrape: true,
       extractItinerary: true,
       extractPolicies: true,
       extractSummary: true,
@@ -38,7 +39,8 @@ export function defaultExtractOptions(mode) {
       extractActivities: true,
       extractTransfers: true,
       maxSidebarClicks: 8,
-      packageDetailWaitMs: 2500
+      packageDetailWaitMs: 2500,
+      closeDetailTabAfterScrape: true
     };
   }
   if (mode === 'mmt-listing') {
@@ -72,7 +74,8 @@ export function defaultExtractOptions(mode) {
       extractActivities: true,
       extractTransfers: false,
       maxSidebarClicks: 8,
-      packageDetailWaitMs: 2500
+      packageDetailWaitMs: 2500,
+      closeDetailTabAfterScrape: true
     };
   }
   return { scrapeMode: 'generic', scrollUntilStable: true, waitMs: 4000 };

@@ -56,6 +56,9 @@ const TYPE2_LISTING_URL =
 const TYPE3_LISTING_URL =
   process.env.VITT_TYPE3_LISTING_URL || TYPE2_LISTING_URL;
 
+/** Type 4 detail-tab close default; Type 3/5 inherit via closeDetailTabAfterScrape in job JSON. */
+const CLOSE_DETAIL_TAB_AFTER_SCRAPE = envBool('VITT_TYPE4_CLOSE_DETAIL_TAB', true);
+
 /** Type 1 — listing only (scroll + HTML/text, no URL clicks). */
 const TYPE1_LISTING_ONLY = {
   scrapeMode: 'mmt-listing',
@@ -87,19 +90,21 @@ const TYPE3_LISTING_SEARCH = {
   waitMs: 3000,
   extractPackageDetail: envBool('VITT_TYPE3_EXTRACT_PACKAGE_DETAIL', true),
   extractItinerary: true,
-  extractPolicies: true,
-  extractSummary: true,
+  extractPolicies: false,
+  extractSummary: false,
   extractHotels: false,
   extractActivities: false,
   extractTransfers: false,
   maxSidebarClicks: 8,
-  packageDetailWaitMs: 2500
+  packageDetailWaitMs: 2500,
+  closeDetailTabAfterScrape: false
 };
 
 /** Type 4 — package detail page (full content scrape). */
 const TYPE4_PACKAGE_DETAIL = {
   scrapeMode: 'mmt-package',
   url: PACKAGE_SCRAPE_URL,
+  closeDetailTabAfterScrape: CLOSE_DETAIL_TAB_AFTER_SCRAPE,
   extractItinerary: true,
   extractPolicies: true,
   extractSummary: true,
@@ -128,7 +133,8 @@ const TYPE5_FIRST_PACKAGE = {
   extractActivities: false,
   extractTransfers: false,
   maxSidebarClicks: 8,
-  packageDetailWaitMs: 2500
+  packageDetailWaitMs: 2500,
+  closeDetailTabAfterScrape: false
 };
 
 const SCRAPE_START_DELAY_MS = Number(process.env.VITT_SCRAPE_START_DELAY_MS || 5000);
