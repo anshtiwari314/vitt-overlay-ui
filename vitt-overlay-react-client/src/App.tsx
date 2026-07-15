@@ -3,6 +3,14 @@ import { useDispatch, useSelector } from 'react-redux'
 import { v4 as uuidv4 } from 'uuid'
 import './App.css'
 import { MicrophoneMediaRecorder, type MicrophoneMediaRecorderState } from './functions/MicrophoneMediaRecorder'
+import { SystemAudioRecorder } from './functions/SystemAudioRecorder'
+import {
+  AUDIO_SOURCES,
+  getAudioSourceId,
+  getAudioSourceLabel,
+  setAudioSourceId,
+  type AudioSourceId
+} from './functions/audioSource'
 import {
   ASR_MODELS,
   getAsrModelId,
@@ -658,7 +666,11 @@ function SettingsTab({
   openExternal,
   onLogout,
   onAsrModelChange,
-  onLidModelChange
+  onLidModelChange,
+  audioSource,
+  onAudioSourceChange,
+  systemAudioAvailable,
+  recordingActive
 }: {
   transparency: number
   setTransparency: (v: number) => void
@@ -667,6 +679,10 @@ function SettingsTab({
   onLogout: () => void
   onAsrModelChange: (modelId: string) => void
   onLidModelChange: (modelId: string) => void
+  audioSource: AudioSourceId
+  onAudioSourceChange: (source: AudioSourceId) => void
+  systemAudioAvailable: boolean
+  recordingActive: boolean
 }) {
   const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
   const [language, setLanguage] = useState('english')
@@ -675,6 +691,7 @@ function SettingsTab({
   const [serverUrlSaveMsg, setServerUrlSaveMsg] = useState<string | null>(null)
   const [asrSaveMsg, setAsrSaveMsg] = useState<string | null>(null)
   const [lidSaveMsg, setLidSaveMsg] = useState<string | null>(null)
+  const [audioSourceSaveMsg, setAudioSourceSaveMsg] = useState<string | null>(null)
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
@@ -766,6 +783,36 @@ function SettingsTab({
           </span>
           {lidSaveMsg ? (
             <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{lidSaveMsg}</span>
+          ) : null}
+        </div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <span className="setting-label">Audio input</span>
+          <select
+            className="setting-input"
+            style={{ width: '100%' }}
+            value={audioSource}
+            disabled={recordingActive}
+            onChange={(e) => {
+              const next = e.target.value as AudioSourceId
+              onAudioSourceChange(next)
+              setAudioSourceSaveMsg(`Using ${getAudioSourceLabel(next)} for the next recording session.`)
+              window.setTimeout(() => setAudioSourceSaveMsg(null), 3200)
+            }}
+          >
+            {AUDIO_SOURCES.filter((source) => source.id === 'mic' || systemAudioAvailable).map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.label}
+              </option>
+            ))}
+          </select>
+          <span className="setting-label" style={{ fontSize: 10, lineHeight: 1.4, textTransform: 'none', fontWeight: 500 }}>
+            {AUDIO_SOURCES.find((s) => s.id === audioSource)?.description ??
+              'Capture audio for transcription.'}
+            {recordingActive ? ' Stop recording before changing the input source.' : ''}
+            {!systemAudioAvailable ? ' System audio is available on Linux in the Electron app only.' : ''}
+          </span>
+          {audioSourceSaveMsg ? (
+            <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{audioSourceSaveMsg}</span>
           ) : null}
         </div>
         <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
@@ -990,6 +1037,11 @@ export default function App() {
   })
   const [micRecorderState, setMicRecorderState] = useState<MicrophoneMediaRecorderState>('idle')
   const micRecorderRef = useRef<MicrophoneMediaRecorder | null>(null)
+  const systemRecorderRef = useRef<SystemAudioRecorder | null>(null)
+  const [audioSource, setAudioSource] = useState<AudioSourceId>(getAudioSourceId)
+  const audioSourceRef = useRef<AudioSourceId>(audioSource)
+  const systemAudioAvailable =
+    (window as unknown as { overlay?: { platform?: string } }).overlay?.platform === 'linux'
 
   const { currentUser, setCurrentUser, setaccess_token } = (useAuth() as unknown) as { currentUser: { userid?: string; id?: string; sessionuid?: string; name?: string; email?: string; role?: string;source?:string} | null; setCurrentUser: (v: null) => void; setaccess_token: (v: string) => void }
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
@@ -1178,6 +1230,22 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    audioSourceRef.current = audioSource
+  }, [audioSource])
+
+  useEffect(() => {
+    if (!systemAudioAvailable && audioSource === 'system') {
+      setAudioSource('mic')
+      setAudioSourceId('mic')
+    }
+  }, [systemAudioAvailable, audioSource])
+
+  const handleAudioSourceChange = useCallback((source: AudioSourceId) => {
+    setAudioSource(source)
+    setAudioSourceId(source)
+  }, [])
+
+  useEffect(() => {
     const formatNow = () =>
       new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
@@ -1198,30 +1266,41 @@ export default function App() {
       onError: (error) => console.error('MicrophoneMediaRecorder error', error)
     })
 
+    systemRecorderRef.current = new SystemAudioRecorder({
+      getWs: () => (wsRef as React.MutableRefObject<WebSocket | null>).current,
+      onStateChange: setMicRecorderState,
+      onError: (error) => console.error('SystemAudioRecorder error', error)
+    })
+
     return () => {
       micRecorderRef.current?.stop()
       micRecorderRef.current = null
+      systemRecorderRef.current?.stop()
+      systemRecorderRef.current = null
     }
   }, [wsRef])
 
   const isMicRecording = micRecorderState === 'recording'
   const isMicPaused = micRecorderState === 'paused'
-  const isRecordingActive = sdkState.recording || isMicRecording
+  const isRecordingActive = sdkState.recording || isMicRecording || isMicPaused
+
+  const getActiveRecorder = () =>
+    audioSourceRef.current === 'system' ? systemRecorderRef.current : micRecorderRef.current
 
   const handleStartRecording = async () => {
     try {
-      await micRecorderRef.current?.start()
+      await getActiveRecorder()?.start()
       recallElectronAPI?.send('message-from-renderer', {
         command: 'start-recording',
         id: recordingMeetingId
       })
     } catch (error) {
-      console.error('Failed to start microphone recording', error)
+      console.error('Failed to start recording', error)
     }
   }
 
   const handlePauseRecording = () => {
-    micRecorderRef.current?.pause()
+    getActiveRecorder()?.pause()
     recallElectronAPI?.send('message-from-renderer', {
       command: 'stop-recording',
       id: recordingMeetingId
@@ -1701,6 +1780,7 @@ export default function App() {
       meetings: []
     })
     micRecorderRef.current?.stop()
+    systemRecorderRef.current?.stop()
     setMicRecorderState('idle')
   }, [dispatch, wsRef])
 
@@ -1888,12 +1968,16 @@ export default function App() {
                   onClick={() => void handleStartRecording()}
                 >
                   <Mic size={18} />
-                  {isMicPaused ? 'Resume Recording' : isRecordingActive ? 'Recording...' : 'Start Recording'}
+                  {isMicPaused
+                    ? 'Resume Recording'
+                    : isRecordingActive
+                      ? `Recording (${getAudioSourceLabel(audioSource)})…`
+                      : 'Start Recording'}
                 </button>
                 <button
                   type="button"
                   className="btn-primary"
-                  disabled={!isMicRecording && !sdkState.recording}
+                  disabled={!isMicRecording && !isMicPaused && !sdkState.recording}
                   onClick={handlePauseRecording}
                 >
                   <Pause size={18} />
@@ -1933,6 +2017,10 @@ export default function App() {
               onLogout={handleLogout}
               onAsrModelChange={sendAsrModelConfig}
               onLidModelChange={sendLidModelConfig}
+              audioSource={audioSource}
+              onAudioSourceChange={handleAudioSourceChange}
+              systemAudioAvailable={systemAudioAvailable}
+              recordingActive={isRecordingActive}
             />
           )}
         </div>

@@ -24,6 +24,7 @@ for (const envPath of envCandidates) {
 }
 
 import { app, BrowserWindow, ipcMain, shell, globalShortcut, nativeTheme, screen, Menu, Tray } from 'electron';
+import { spawn, execSync } from 'child_process';
 import contextMenu from 'electron-context-menu';
 
 // Right-click context menu (cut/copy/paste/select-all) for any editable
@@ -41,6 +42,164 @@ contextMenu({
 let win;
 let tray;
 let isClickThrough = true;
+
+/** 200 ms PCM s16le mono @ 16 kHz (matches overlay WebSocket backend). */
+const PCM_CHUNK_BYTES = 3200;
+
+let ffmpegProc = null;
+let systemPcmCarry = Buffer.alloc(0);
+let manualFfmpegStop = false;
+let systemCaptureActive = false;
+
+function sendSystemPcmToRenderer(chunk) {
+  try {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('overlay:system-pcm-chunk', chunk);
+    }
+  } catch (e) {
+    console.error('Failed to send system PCM chunk to renderer:', e);
+  }
+}
+
+function feedSystemPcm(chunk) {
+  if (!systemCaptureActive) return;
+  systemPcmCarry = Buffer.concat([systemPcmCarry, chunk]);
+  while (systemPcmCarry.length >= PCM_CHUNK_BYTES) {
+    const block = systemPcmCarry.subarray(0, PCM_CHUNK_BYTES);
+    systemPcmCarry = systemPcmCarry.subarray(PCM_CHUNK_BYTES);
+    sendSystemPcmToRenderer(block);
+  }
+}
+
+function getLinuxSystemAudioDevice() {
+  try {
+    const defaultSink = execSync('pactl get-default-sink').toString().trim();
+    if (defaultSink) {
+      return `${defaultSink}.monitor`;
+    }
+  } catch (error) {
+    console.warn('Could not determine default PulseAudio sink. Falling back to default.');
+  }
+
+  try {
+    const sources = execSync('pactl list sources short').toString();
+    const lines = sources.split('\n');
+    for (const line of lines) {
+      if (line.includes('.monitor')) {
+        const parts = line.split('\t');
+        if (parts.length > 1) {
+          return parts[1];
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not list PulseAudio sources.');
+  }
+
+  return 'default';
+}
+
+function buildLinuxFfmpegArgs() {
+  const device = getLinuxSystemAudioDevice();
+  console.log(`[SystemAudio] Using Linux monitor device: ${device}`);
+
+  let inputDevice = device;
+  try {
+    const sources = execSync('pactl list sources short').toString();
+    if (!sources.includes(device) && device !== 'default') {
+      console.warn(`[SystemAudio] Device ${device} not found; searching for a monitor source`);
+      const lines = sources.split('\n');
+      for (const line of lines) {
+        if (line.includes('.monitor')) {
+          const parts = line.split('\t');
+          if (parts.length > 1) {
+            inputDevice = parts[1];
+            break;
+          }
+        }
+      }
+      console.log(`[SystemAudio] Using fallback monitor: ${inputDevice}`);
+    }
+  } catch (e) {
+    console.warn('[SystemAudio] Could not verify PulseAudio sources:', e.message);
+  }
+
+  return ['-f', 'pulse', '-i', inputDevice, '-f', 's16le', '-ac', '1', '-ar', '16000', 'pipe:1'];
+}
+
+function startSystemAudioCapture() {
+  if (process.platform !== 'linux') {
+    return { ok: false, error: 'System audio capture is only supported on Linux.' };
+  }
+  if (ffmpegProc) {
+    return { ok: true, already: true };
+  }
+
+  manualFfmpegStop = false;
+  systemCaptureActive = true;
+  systemPcmCarry = Buffer.alloc(0);
+
+  const args = buildLinuxFfmpegArgs();
+  try {
+    ffmpegProc = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch (e) {
+    ffmpegProc = null;
+    systemCaptureActive = false;
+    return { ok: false, error: e.message || String(e) };
+  }
+
+  ffmpegProc.stdout.on('data', feedSystemPcm);
+
+  ffmpegProc.stderr.on('data', (data) => {
+    const msg = data.toString();
+    if (
+      msg.toLowerCase().includes('error') ||
+      msg.toLowerCase().includes('failed') ||
+      msg.toLowerCase().includes('invalid')
+    ) {
+      console.error(`[SystemAudio FFmpeg] ${msg.trim()}`);
+    }
+  });
+
+  ffmpegProc.on('error', (e) => {
+    console.error('[SystemAudio] FFmpeg spawn error:', e);
+  });
+
+  ffmpegProc.on('close', (code) => {
+    console.log(`[SystemAudio] FFmpeg exited with code ${code}`);
+    ffmpegProc = null;
+    systemPcmCarry = Buffer.alloc(0);
+
+    if (systemCaptureActive && !manualFfmpegStop) {
+      console.log('[SystemAudio] Restarting FFmpeg in 1 second…');
+      setTimeout(() => {
+        if (systemCaptureActive && !manualFfmpegStop) {
+          startSystemAudioCapture();
+        }
+      }, 1000);
+    }
+  });
+
+  return { ok: true };
+}
+
+function stopSystemAudioCapture() {
+  manualFfmpegStop = true;
+  systemCaptureActive = false;
+  systemPcmCarry = Buffer.alloc(0);
+
+  if (ffmpegProc) {
+    ffmpegProc.kill('SIGINT');
+    ffmpegProc = null;
+  }
+
+  return { ok: true };
+}
+
+function registerSystemAudioIpc() {
+  ipcMain.handle('overlay:system-audio-start', () => startSystemAudioCapture());
+  ipcMain.handle('overlay:system-audio-stop', () => stopSystemAudioCapture());
+}
 
 /** Active detected meetings. Source of truth for renderer UI. */
 let detectedMeetings = [];
@@ -250,6 +409,7 @@ app.setAppUserModelId('com.VittAi.overlay');
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 
+  registerSystemAudioIpc();
   createWindow();
   createTray();
 
@@ -263,6 +423,10 @@ app.whenReady().then(() => {
 
   app.on('window-all-closed', () => {
     // Keep app alive like standard tray apps.
+  });
+
+  app.on('before-quit', () => {
+    stopSystemAudioCapture();
   });
 
   ipcMain.on('close-app', () => {
@@ -356,5 +520,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopSystemAudioCapture();
   if (process.platform !== 'darwin') app.quit();
 });

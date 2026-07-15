@@ -3,6 +3,14 @@ const { contextBridge, ipcRenderer } = require('electron');
 console.log("Preload loaded");
 
 contextBridge.exposeInMainWorld('overlay', {
+  platform: process.platform,
+  startSystemAudioCapture: () => ipcRenderer.invoke('overlay:system-audio-start'),
+  stopSystemAudioCapture: () => ipcRenderer.invoke('overlay:system-audio-stop'),
+  onSystemPcmChunk: (cb) => {
+    const subscription = (_event, data) => cb(data);
+    ipcRenderer.on('overlay:system-pcm-chunk', subscription);
+    return () => ipcRenderer.removeListener('overlay:system-pcm-chunk', subscription);
+  },
   onClickThrough: (cb) => ipcRenderer.on('overlay:clickThrough', (_e, val) => cb(val)),
   somethingHappened: (cb) => ipcRenderer.on('something-happened', (_e, data) => cb(data)),
   getRecallBuffer: (cb) => {
