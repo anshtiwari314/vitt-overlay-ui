@@ -5,7 +5,7 @@ import './App.css'
 import { addTranscription, clearTranscriptions } from './redux/reducers/TranscriptionReducer'
 import { addPrompt, clearPrompts } from './redux/reducers/promptsReducer'
 import { addConversationTurn, addIncomingMessages, addOutgoingMessage, clearChat } from './redux/reducers/chatWithAIReducer'
-import ReactHtmlParser from 'html-react-parser'
+import parse from 'html-react-parser'
 import {
   AlertCircle,
   CheckCircle2,
@@ -76,6 +76,10 @@ type CallSessionState = 'refreshed' | 'can_start' | 'active'
 
 function stripHtmlForCopy(html: string) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function renderIncomingMessageContent(content: string) {
+  return <div className="chat-html-content">{parse(content)}</div>
 }
 
 function getMeetingPlatformIcon(platform?: string | null) {
@@ -700,7 +704,6 @@ type AiAssistFeedItem = {
   id: string
   side: 'left' | 'right'
   content: string
-  isHtml: boolean
   copyText: string
 }
 
@@ -727,14 +730,12 @@ function MergedAiAssistTab({
     const items: AiAssistFeedItem[] = []
 
     ;[...prompts].reverse().forEach((entry, index) => {
-      const formatted = formatAiAssistContent(entry.prompt)
-      if (!formatted) return
+      if (!entry.prompt?.trim()) return
       items.push({
         id: `assist-${index}-${entry.prompt.slice(0, 24)}`,
         side: 'left',
-        content: formatted,
-        isHtml: true,
-        copyText: stripHtmlForCopy(formatted)
+        content: entry.prompt,
+        copyText: stripHtmlForCopy(entry.prompt)
       })
     })
 
@@ -743,7 +744,6 @@ function MergedAiAssistTab({
         id: msg.id,
         side: msg.role === 'user' ? 'right' : 'left',
         content: msg.content,
-        isHtml: msg.role !== 'user',
         copyText: msg.role === 'user' ? msg.content : stripHtmlForCopy(msg.content)
       })
     })
@@ -843,11 +843,9 @@ function MergedAiAssistTab({
             return (
               <div key={item.id} className={`${bubbleClass} chat-message-with-copy${hl}`}>
                 <div className="chat-message-body">
-                  {item.isHtml ? (
-                    <div className="chat-html-content">{ReactHtmlParser(item.content)}</div>
-                  ) : (
-                    item.content
-                  )}
+                  {item.side === 'left'
+                    ? renderIncomingMessageContent(item.content)
+                    : item.content}
                 </div>
                 <button
                   type="button"
