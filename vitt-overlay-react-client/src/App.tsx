@@ -5,12 +5,11 @@ import './App.css'
 import { addTranscription, clearTranscriptions } from './redux/reducers/TranscriptionReducer'
 import { addPrompt, clearPrompts } from './redux/reducers/promptsReducer'
 import { addConversationTurn, addIncomingMessages, addOutgoingMessage, clearChat } from './redux/reducers/chatWithAIReducer'
-import parse from 'html-react-parser'
 import ReactHtmlParser from 'html-react-parser'
 import {
   AlertCircle,
-  BotMessageSquare,
   CheckCircle2,
+  Chrome,
   Copy,
   Database,
   FileText,
@@ -20,7 +19,9 @@ import {
   Mic,
   Minus,
   Pause,
+  Lock,
   RefreshCw,
+  Server,
   Settings,
   Sparkles,
   SunMedium,
@@ -58,6 +59,23 @@ export type DataInfoField = {
   is_copyable?: boolean | string
   type?: 'text' | 'textarea' | 'option'
   options?: string[]
+}
+
+const LOCAL_REQUIRED_FIELD_IDS = new Set(['ticket_id', 'client_mob_no'])
+
+const DEFAULT_DATA_FIELDS: DataInfoField[] = [
+  { id: 'ticket_id', label: 'Ticket Id', value: '', is_editable: true, type: 'text' },
+  { id: 'client_mob_no', label: 'Client Mobile No', value: '', is_editable: true, type: 'text' },
+]
+
+function isFieldLocked(field?: DataInfoField) {
+  return field?.is_editable === false || field?.is_editable === 'false'
+}
+
+type CallSessionState = 'refreshed' | 'can_start' | 'active'
+
+function stripHtmlForCopy(html: string) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function getMeetingPlatformIcon(platform?: string | null) {
@@ -313,6 +331,28 @@ function formatAiAssistContent(raw: string) {
   return blocks.join('')
 }
 
+function ConnectionStatusIcon({
+  connected,
+  label,
+  icon: Icon
+}: {
+  connected: boolean
+  label: string
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
+}) {
+  return (
+    <div
+      className={`connection-status-icon ${connected ? 'connected' : 'disconnected'}`}
+      title={label}
+    >
+      <span className="connection-status-icon-wrap">
+        <Icon size={18} strokeWidth={2} />
+      </span>
+      <span className="connection-status-tooltip">{label}</span>
+    </div>
+  )
+}
+
 function TranscriptionList() {
   const transcriptions = useSelector((state: { transcriptionReducer: { transcriptions: { speaker?: string; transcription: string }[] } }) => state.transcriptionReducer.transcriptions)
   const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(transcriptions, 'top')
@@ -338,55 +378,20 @@ function TranscriptionItem({ e, highlighted }: { e: { speaker?: string; transcri
   )
 }
 
-function PromptList() {
-  const prompts = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) => state.promptsReducer.prompts)
-  const list = prompts ?? []
-  const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(list, 'top')
-
-  return (
-    <div className="list-wrap">
-      <div className="content-list" ref={ref}>
-        {list.length === 0 ? (
-          <div className="prompt-empty">
-            <div className="prompt-empty-title">No AI Assist results yet</div>
-            <div className="prompt-empty-text">Use the Suggest button above to trigger AI Assist.</div>
-          </div>
-        ) : null}
-        {list.map((entry, index) => (
-          <PromptItem e={entry} key={index} highlighted={isHighlighted(index)} />
-        ))}
-      </div>
-      <NewMessagesIndicator count={unseenCount} mode="top" onClick={scrollToFollow} />
-    </div>
-  )
-}
-
-function PromptItem({ e, highlighted }: { e: { prompt: string }; highlighted?: boolean }) {
-  const formattedPrompt = formatAiAssistContent(e.prompt)
-
-  if (!formattedPrompt) {
-    return null
-  }
-
-  return (
-    <div className={`prompt-card${highlighted ? ' highlight-new' : ''}`}>
-      <div className="transcription-text prompt-card-body">{parse(formattedPrompt)}</div>
-    </div>
-  )
-}
-
 function DataInfoList({
   items,
   onChange,
   onFocus,
   onBlur,
-  onCopy
+  onCopy,
+  onCommit
 }: {
   items: DataInfoField[]
   onChange: (id: string, newValue: string) => void
   onFocus: (id: string) => void
   onBlur: (id: string) => void
   onCopy: (value: string) => void
+  onCommit: (id: string) => void
 }) {
   const { ref, unseenCount, scrollToFollow } = useScrollLock(items, 'top')
 
@@ -416,6 +421,7 @@ function DataInfoList({
                 onFocus={onFocus}
                 onBlur={onBlur}
                 onCopy={onCopy}
+                onCommit={onCommit}
               />
             ))}
           </div>
@@ -431,16 +437,20 @@ function DataInfoFieldItem({
   onChange,
   onFocus,
   onBlur,
-  onCopy
+  onCopy,
+  onCommit
 }: {
   item: DataInfoField
   onChange: (id: string, newValue: string) => void
   onFocus: (id: string) => void
   onBlur: (id: string) => void
   onCopy: (value: string) => void
+  onCommit: (id: string) => void
 }) {
   const isEditable = item.is_editable === true || item.is_editable === 'true'
   const isCopyable = item.is_copyable === true || item.is_copyable === 'true'
+  const isLocalRequired = LOCAL_REQUIRED_FIELD_IDS.has(item.id)
+  const canCommit = isLocalRequired && isEditable && Boolean(item.value?.trim())
 
   return (
     <div className="data-info-field-row">
@@ -480,6 +490,16 @@ function DataInfoFieldItem({
             readOnly={!isEditable}
             className="data-info-input"
           />
+        )}
+        {canCommit && (
+          <button
+            type="button"
+            className="btn-icon data-info-lock-btn"
+            onClick={() => onCommit(item.id)}
+            title="Lock"
+          >
+            <Lock size={14} />
+          </button>
         )}
         {isCopyable && (
           <button
@@ -676,22 +696,62 @@ function SettingsTab({
   )
 }
 
-function ChatWithAITab({
+type AiAssistFeedItem = {
+  id: string
+  side: 'left' | 'right'
+  content: string
+  isHtml: boolean
+  copyText: string
+}
+
+function MergedAiAssistTab({
   userid,
   sessionid,
-  source
+  source,
+  onCopy
 }: {
   userid: string
   sessionid: string
   source?: string
+  onCopy: (value: string) => void
 }) {
   const dispatch = useDispatch()
   const { wsRef } = (useData() as unknown) as { wsRef: React.MutableRefObject<WebSocket | null> }
   const messages = useSelector((state: { chatWithAIReducer: { messages: ChatMessage[] } }) => state.chatWithAIReducer.messages)
+  const prompts = useSelector((state: { promptsReducer: { prompts: { prompt: string }[] } }) => state.promptsReducer.prompts)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { ref: scrollRef, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(messages, 'bottom')
+
+  const feedItems = useMemo<AiAssistFeedItem[]>(() => {
+    const items: AiAssistFeedItem[] = []
+
+    ;[...prompts].reverse().forEach((entry, index) => {
+      const formatted = formatAiAssistContent(entry.prompt)
+      if (!formatted) return
+      items.push({
+        id: `assist-${index}-${entry.prompt.slice(0, 24)}`,
+        side: 'left',
+        content: formatted,
+        isHtml: true,
+        copyText: stripHtmlForCopy(formatted)
+      })
+    })
+
+    messages.forEach((msg) => {
+      items.push({
+        id: msg.id,
+        side: msg.role === 'user' ? 'right' : 'left',
+        content: msg.content,
+        isHtml: msg.role !== 'user',
+        copyText: msg.role === 'user' ? msg.content : stripHtmlForCopy(msg.content)
+      })
+    })
+
+    return items
+  }, [messages, prompts])
+
+  const { ref: scrollRef, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(feedItems, 'bottom')
 
   useEffect(() => {
     const el = scrollRef.current
@@ -770,16 +830,33 @@ function ChatWithAITab({
     <div className="chat-tab">
       <div className="chat-messages-wrap" style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div className="chat-messages" ref={scrollRef}>
-          {messages.map((msg, i) => {
-            const fromEnd = messages.length - 1 - i
+          {feedItems.length === 0 ? (
+            <div className="prompt-empty">
+              <div className="prompt-empty-title">No AI Assist results yet</div>
+              <div className="prompt-empty-text">Start a new call and send a message to begin.</div>
+            </div>
+          ) : null}
+          {feedItems.map((item, i) => {
+            const fromEnd = feedItems.length - 1 - i
             const hl = isHighlighted(fromEnd) ? ' highlight-new' : ''
-            return msg.role === 'user' ? (
-              <div key={msg.id} className={`chat-message-out${hl}`}>
-                {msg.content}
-              </div>
-            ) : (
-              <div key={msg.id} className={`chat-message-in${hl}`}>
-                <div className="chat-html-content">{ReactHtmlParser(msg.content)}</div>
+            const bubbleClass = item.side === 'right' ? 'chat-message-out' : 'chat-message-in'
+            return (
+              <div key={item.id} className={`${bubbleClass} chat-message-with-copy${hl}`}>
+                <div className="chat-message-body">
+                  {item.isHtml ? (
+                    <div className="chat-html-content">{ReactHtmlParser(item.content)}</div>
+                  ) : (
+                    item.content
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="msg-copy-btn"
+                  onClick={() => onCopy(item.copyText)}
+                  title="Copy"
+                >
+                  <Copy size={13} />
+                </button>
               </div>
             )
           })}
@@ -815,10 +892,13 @@ export default function App() {
   const [selectedTab, setSelectedTab] = useState('transcript')
   const [theme, setTheme] = useState('transparent')
   const [transparency, setTransparency] = useState(85)
-  const [currentTime, setCurrentTime] = useState('')
   const [isServerConnected, setIsServerConnected] = useState(false)
   const extensionConnected = useExtensionBridgeStatus()
-  const [dataInfoItems, setDataInfoItems] = useState<DataInfoField[]>([])
+  const [dataInfoItems, setDataInfoItems] = useState<DataInfoField[]>(() =>
+    DEFAULT_DATA_FIELDS.map((field) => ({ ...field }))
+  )
+  const [wsConnectEnabled, setWsConnectEnabled] = useState(false)
+  const [callSessionState, setCallSessionState] = useState<CallSessionState>('refreshed')
   const [sdkState, setSdkState] = useState({
     recording: false,
     permissions_granted: true,
@@ -840,12 +920,27 @@ export default function App() {
   const focusedFieldIdRef = useRef<string | null>(null)
   const lastSentDataRef = useRef<string>('')
   const pendingSendRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dataInfoItemsRef = useRef(dataInfoItems)
+  const pendingInitFieldsRef = useRef<{ ticket_id: string; client_mob_no: string } | null>(null)
+  const wsConnectEnabledRef = useRef(wsConnectEnabled)
+
+  useEffect(() => {
+    dataInfoItemsRef.current = dataInfoItems
+  }, [dataInfoItems])
+
+  useEffect(() => {
+    wsConnectEnabledRef.current = wsConnectEnabled
+  }, [wsConnectEnabled])
 
   const handleDataInfoChange = useCallback((id: string, newValue: string) => {
     setDataInfoItems((prev) => {
       const updated = prev.map((item) =>
         item.id === id ? { ...item, value: newValue } : item
       )
+
+      if (LOCAL_REQUIRED_FIELD_IDS.has(id)) {
+        return updated
+      }
 
       if (pendingSendRef.current) {
         clearTimeout(pendingSendRef.current)
@@ -882,6 +977,16 @@ export default function App() {
     })
   }, [wsRef])
 
+  const handleDataInfoCommit = useCallback((id: string) => {
+    setDataInfoItems((prev) =>
+      prev.map((item) =>
+        item.id === id && item.value?.trim()
+          ? { ...item, is_editable: false }
+          : item
+      )
+    )
+  }, [])
+
   const handleDataInfoFocus = useCallback((id: string) => {
     focusedFieldIdRef.current = id
   }, [])
@@ -899,14 +1004,15 @@ export default function App() {
   )
   const prevAssistantMsgCount = useRef(0)
   const prevPromptsCount = useRef(0)
-  const prevDataLen = useRef(0)
+  const prevDataLen = useRef(DEFAULT_DATA_FIELDS.length)
 
   const selectedTabRef = useRef(selectedTab)
   const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
-  const [isSuggesting, setIsSuggesting] = useState(false)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevMeetingsCountRef = useRef(0)
   const [copyToast, setCopyToast] = useState(false)
+  const [statusToast, setStatusToast] = useState<string | null>(null)
+  const statusToastTimerRef = useRef<number | null>(null)
   const [actionToast, setActionToast] = useState<{ message: string; error?: boolean } | null>(null)
   const actionToastTimerRef = useRef<number | null>(null)
 
@@ -925,7 +1031,7 @@ export default function App() {
     meetingsRef.current = meetings
   }, [meetings])
 
-  const sendClientInit = (ws: WebSocket) => {
+  const sendClientInit = useCallback((ws: WebSocket) => {
     const initUserid =
       currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
     const roomId = resolveOverlayRoomId(
@@ -933,6 +1039,17 @@ export default function App() {
       meetingsRef.current,
       initUserid
     )
+    const pending = pendingInitFieldsRef.current
+    const ticketId =
+      pending?.ticket_id ??
+      dataInfoItemsRef.current.find((item) => item.id === 'ticket_id')?.value?.trim() ??
+      ''
+    const clientMobNo =
+      pending?.client_mob_no ??
+      dataInfoItemsRef.current.find((item) => item.id === 'client_mob_no')?.value?.trim() ??
+      ''
+    pendingInitFieldsRef.current = null
+
     ws.send(
       JSON.stringify({
         type: 'client-init',
@@ -942,10 +1059,32 @@ export default function App() {
         sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
         roomId,
         roomid: roomId,
+        ticket_id: ticketId,
+        client_mob_no: clientMobNo,
         timestamp: getTimeStamp()
       })
     )
-  }
+  }, [])
+
+  const sendClientInitRef = useRef(sendClientInit)
+  sendClientInitRef.current = sendClientInit
+
+  const requiredFieldsLocked = useMemo(() => {
+    const ticket = dataInfoItems.find((item) => item.id === 'ticket_id')
+    const mobile = dataInfoItems.find((item) => item.id === 'client_mob_no')
+    return Boolean(
+      ticket?.value?.trim() &&
+      mobile?.value?.trim() &&
+      isFieldLocked(ticket) &&
+      isFieldLocked(mobile)
+    )
+  }, [dataInfoItems])
+
+  useEffect(() => {
+    if (callSessionState === 'refreshed' && requiredFieldsLocked) {
+      setCallSessionState('can_start')
+    }
+  }, [callSessionState, requiredFieldsLocked])
 
   const socketUrl = useMemo(() => {
     try {
@@ -997,22 +1136,14 @@ export default function App() {
   }, [selectedTab])
 
   useEffect(() => {
-    if (assistantMsgCount > prevAssistantMsgCount.current) {
-      if (selectedTabRef.current !== 'chat') {
-        setUnreadTabs((prev) => { const s = new Set(prev); s.add('chat'); return s })
-      }
+    const assistantIncreased = assistantMsgCount > prevAssistantMsgCount.current
+    const promptsIncreased = promptsCount > prevPromptsCount.current
+    if ((assistantIncreased || promptsIncreased) && selectedTabRef.current !== 'ai_assist') {
+      setUnreadTabs((prev) => { const s = new Set(prev); s.add('ai_assist'); return s })
     }
     prevAssistantMsgCount.current = assistantMsgCount
-  }, [assistantMsgCount])
-
-  useEffect(() => {
-    if (promptsCount > prevPromptsCount.current) {
-      if (selectedTabRef.current !== 'prompts') {
-        setUnreadTabs((prev) => { const s = new Set(prev); s.add('prompts'); return s })
-      }
-    }
     prevPromptsCount.current = promptsCount
-  }, [promptsCount])
+  }, [assistantMsgCount, promptsCount])
 
   useEffect(() => {
     if (dataInfoItems.length > prevDataLen.current) {
@@ -1029,25 +1160,12 @@ export default function App() {
         clearTimeout(suggestTimeoutRef.current)
         suggestTimeoutRef.current = null
       }
-      setIsSuggesting(false)
     }
     window.addEventListener('chat-response-received', onResponse)
     return () => {
       window.removeEventListener('chat-response-received', onResponse)
       if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
     }
-  }, [])
-
-  useEffect(() => {
-    const formatNow = () =>
-      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
-    setCurrentTime(formatNow())
-    const timer = setInterval(() => {
-      setCurrentTime(formatNow())
-    }, 1000)
-
-    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -1104,6 +1222,11 @@ export default function App() {
   const wsReconnectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
+    if (!wsConnectEnabled) {
+      wsReconnectRef.current = null
+      return undefined
+    }
+
     const ref = wsRef as React.MutableRefObject<WebSocket | null>
     const reconnectInterval = 1000
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -1135,7 +1258,7 @@ export default function App() {
     }
 
     const connect = () => {
-      if (disposed) return
+      if (disposed || !wsConnectEnabledRef.current) return
       teardownWs()
 
       const tempWs = new WebSocket(socketUrl)
@@ -1145,7 +1268,7 @@ export default function App() {
       tempWs.onopen = () => {
         if (disposed) return
         setIsServerConnected(true)
-        sendClientInit(tempWs)
+        sendClientInitRef.current(tempWs)
       }
 
       tempWs.onmessage = (event: MessageEvent) => {
@@ -1175,16 +1298,35 @@ export default function App() {
 
             if (nextDataInfoItems.length > 0) {
               setDataInfoItems((prev) => {
-                const focusedId = focusedFieldIdRef.current;
-                const merged = nextDataInfoItems.map((incomingItem) => {
-                  if (focusedId && incomingItem.id === focusedId) {
-                    const existing = prev.find(p => p.id === focusedId);
-                    return existing ? { ...incomingItem, value: existing.value } : incomingItem;
+                const focusedId = focusedFieldIdRef.current
+                const byId = new Map(prev.map((item) => [item.id, item]))
+
+                for (const incomingItem of nextDataInfoItems) {
+                  const existing = byId.get(incomingItem.id)
+                  if (
+                    existing &&
+                    LOCAL_REQUIRED_FIELD_IDS.has(existing.id) &&
+                    isFieldLocked(existing)
+                  ) {
+                    byId.set(incomingItem.id, existing)
+                    continue
                   }
-                  return incomingItem;
-                });
-                lastSentDataRef.current = JSON.stringify(merged);
-                return merged;
+                  if (focusedId && incomingItem.id === focusedId && existing) {
+                    byId.set(incomingItem.id, { ...incomingItem, value: existing.value })
+                  } else {
+                    byId.set(incomingItem.id, incomingItem)
+                  }
+                }
+
+                for (const def of DEFAULT_DATA_FIELDS) {
+                  if (!byId.has(def.id)) {
+                    byId.set(def.id, { ...def })
+                  }
+                }
+
+                const merged = Array.from(byId.values())
+                lastSentDataRef.current = JSON.stringify(merged)
+                return merged
               })
             }
           }
@@ -1319,7 +1461,7 @@ export default function App() {
         setIsServerConnected(false)
         appSharedWs = null
         ref.current = null
-        if (disposed) return
+        if (disposed || !wsConnectEnabledRef.current) return
         reconnectTimer = setTimeout(connect, reconnectInterval)
       }
 
@@ -1329,6 +1471,7 @@ export default function App() {
     }
 
     wsReconnectRef.current = () => {
+      if (!wsConnectEnabledRef.current) return
       clearReconnect()
       setIsServerConnected(false)
       connect()
@@ -1341,7 +1484,7 @@ export default function App() {
       wsReconnectRef.current = null
       teardownWs()
     }
-  }, [socketUrl, wsRef])
+  }, [socketUrl, wsRef, wsConnectEnabled])
 
   useEffect(() => {
     const overlay = (window as unknown as {
@@ -1601,9 +1744,10 @@ export default function App() {
     setActiveSessionId(nextFallbackSessionId)
     setSelectedTab('transcript')
     setUnreadTabs(new Set())
-    setIsSuggesting(false)
     setCopyToast(false)
-    setDataInfoItems([])
+    setDataInfoItems(DEFAULT_DATA_FIELDS.map((field) => ({ ...field })))
+    setWsConnectEnabled(false)
+    setCallSessionState('refreshed')
     setIsServerConnected(false)
     setMeetings([])
     setActiveMeetingId(null)
@@ -1638,7 +1782,79 @@ export default function App() {
     }
   }
 
-  const triggerRefresh = () => {
+  const showStatusToast = (message: string) => {
+    if (statusToastTimerRef.current) {
+      clearTimeout(statusToastTimerRef.current)
+      statusToastTimerRef.current = null
+    }
+    setStatusToast(message)
+    statusToastTimerRef.current = window.setTimeout(() => {
+      setStatusToast(null)
+      statusToastTimerRef.current = null
+    }, 3200)
+  }
+
+  const clearSessionUi = useCallback(() => {
+    dispatch(clearTranscriptions())
+    dispatch(clearPrompts())
+    dispatch(clearChat())
+
+    if (pendingSendRef.current) {
+      clearTimeout(pendingSendRef.current)
+      pendingSendRef.current = null
+    }
+
+    if (suggestTimeoutRef.current) {
+      clearTimeout(suggestTimeoutRef.current)
+      suggestTimeoutRef.current = null
+    }
+
+    prevAssistantMsgCount.current = 0
+    prevPromptsCount.current = 0
+    setUnreadTabs(new Set())
+  }, [dispatch])
+
+  const refreshCallSession = useCallback(() => {
+    clearSessionUi()
+
+    focusedFieldIdRef.current = null
+    lastSentDataRef.current = ''
+    prevDataLen.current = DEFAULT_DATA_FIELDS.length
+    pendingInitFieldsRef.current = null
+
+    setDataInfoItems(DEFAULT_DATA_FIELDS.map((field) => ({ ...field })))
+    setWsConnectEnabled(false)
+    setIsServerConnected(false)
+    setCallSessionState('refreshed')
+  }, [clearSessionUi])
+
+  const triggerStartNewCall = () => {
+    if (callSessionState === 'active') {
+      refreshCallSession()
+      return
+    }
+
+    if (callSessionState === 'can_start' && requiredFieldsLocked) {
+      pendingInitFieldsRef.current = {
+        ticket_id: dataInfoItems.find((item) => item.id === 'ticket_id')?.value?.trim() ?? '',
+        client_mob_no: dataInfoItems.find((item) => item.id === 'client_mob_no')?.value?.trim() ?? ''
+      }
+
+      clearSessionUi()
+      setCallSessionState('active')
+
+      if (wsConnectEnabled) {
+        wsReconnectRef.current?.()
+      } else {
+        setWsConnectEnabled(true)
+      }
+      return
+    }
+
+    showStatusToast('Enter and lock Ticket Id and Client Mobile No in the Data tab.')
+  }
+
+  /* const triggerRefresh = () => {
     dispatch(clearTranscriptions())
     dispatch(clearPrompts())
     dispatch(clearChat())
@@ -1665,9 +1881,9 @@ export default function App() {
     setIsServerConnected(false)
 
     wsReconnectRef.current?.()
-  }
+  } */
 
-  const triggerSuggest = () => {
+  /* const triggerSuggest = () => {
     if (isSuggesting) return
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
     if (ws?.readyState !== WebSocket.OPEN) return
@@ -1682,7 +1898,7 @@ export default function App() {
       source,
       userid, sessionid,
     }))
-  }
+  } */
 
   return (
     <div>
@@ -1772,26 +1988,17 @@ export default function App() {
           return null
         })()}
 
-        <div style={{ padding: '0 12px 6px', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="no-drag">
-            <div style={{ color: 'rgba(255,255,255,0.75)', marginBottom: 2 }}>{currentTime}</div>
-            <div style={{ color: extensionConnected ? '#22c55e' : '#ef4444' }}>
-              {extensionConnected ? 'Browser Connected' : 'Browser disconnected'}
-            </div>
-            <div style={{ color: isServerConnected ? '#22c55e' : '#ef4444', marginTop: 2 }}>
-              {isServerConnected ? 'Server Connected' : 'Server Disconnected'}
-            </div>
-          </div>
-          <div className="prompt-actions no-drag">
-            <button type="button" className="prompt-trigger-btn prompt-trigger-btn-secondary" onClick={triggerRefresh}>
-              <RefreshCw size={13} style={{ marginRight: 4 }} />
-              Refresh
-            </button>
-            <button type="button" className="prompt-trigger-btn" onClick={triggerSuggest} disabled={isSuggesting}>
-              <Sparkles size={13} style={{ marginRight: 4 }} />
-              {isSuggesting ? 'Thinking...' : 'Suggest'}
-            </button>
-          </div>
+        <div className="connection-status-bar no-drag">
+          <ConnectionStatusIcon
+            connected={extensionConnected}
+            label={extensionConnected ? 'Browser Connected' : 'Browser Disconnected'}
+            icon={Chrome}
+          />
+          <ConnectionStatusIcon
+            connected={isServerConnected}
+            label={isServerConnected ? 'Server Connected' : 'Server Disconnected'}
+            icon={Server}
+          />
         </div>
 
         <div className="status-section" />
@@ -1802,17 +2009,15 @@ export default function App() {
               <>
                 <button
                   type="button"
-                  className={`btn-primary ${sdkState.recording ? 'recording' : ''}`}
-                  disabled={sdkState.recording}
-                  onClick={() =>
-                    recallElectronAPI?.send('message-from-renderer', {
-                      command: 'start-recording',
-                      id: recordingMeetingId
-                    })
-                  }
+                  className={`btn-primary start-new-call ${
+                    callSessionState === 'can_start' || callSessionState === 'active'
+                      ? 'ready'
+                      : 'blocked'
+                  }`}
+                  onClick={triggerStartNewCall}
                 >
-                  <Mic size={18} />
-                  {sdkState.recording ? 'Recording...' : 'Start Recording'}
+                  {callSessionState === 'active' ? <RefreshCw size={18} /> : <Mic size={18} />}
+                  {callSessionState === 'active' ? 'Refresh' : 'Start New Call'}
                 </button>
                 <button
                   type="button"
@@ -1840,8 +2045,14 @@ export default function App() {
         <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           {selectedTab === 'transcript' && <TranscriptionList />}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
-          {selectedTab === 'chat' && <ChatWithAITab userid={userid} sessionid={sessionid} source={source} />}
-          {selectedTab === 'prompts' && <PromptList />}
+          {selectedTab === 'ai_assist' && (
+            <MergedAiAssistTab
+              userid={userid}
+              sessionid={sessionid}
+              source={source}
+              onCopy={copyToClipboard}
+            />
+          )}
           {selectedTab === 'data_info' && (
             <DataInfoList
               items={dataInfoItems}
@@ -1849,6 +2060,7 @@ export default function App() {
               onFocus={handleDataInfoFocus}
               onBlur={handleDataInfoBlur}
               onCopy={copyToClipboard}
+              onCommit={handleDataInfoCommit}
             />
           )}
           {/* {selectedTab === 'scrape' && <ScrapePanel serverConnected={isServerConnected} />} */}
@@ -1863,17 +2075,18 @@ export default function App() {
           )}
         </div>
 
-        <div className="tab-bar no-drag" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="tab-bar no-drag" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           <TabButton active={selectedTab === 'transcript'} onClick={() => handleTabSelect('transcript')} icon={<FileText size={18} />} label="Transcript" />
           {/* <TabButton active={selectedTab === 'uploads'} onClick={() => handleTabSelect('uploads')} icon={<Cloud size={18} />} label="Uploads" /> */}
-          <TabButton active={selectedTab === 'chat'} onClick={() => handleTabSelect('chat')} icon={<BotMessageSquare size={18} />} label="AI Chat" hasUnread={unreadTabs.has('chat')} />
-          <TabButton active={selectedTab === 'prompts'} onClick={() => handleTabSelect('prompts')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('prompts')} />
+          <TabButton active={selectedTab === 'ai_assist'} onClick={() => handleTabSelect('ai_assist')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('ai_assist')} />
           <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
           {/* <TabButton active={selectedTab === 'scrape'} onClick={() => handleTabSelect('scrape')} icon={<Globe size={18} />} label="Scrape" /> */}
         </div>
 
         <div className="toast-container">
-          <div className={`toast ${copyToast ? 'visible' : ''}`}>Copied to clipboard</div>
+          <div className={`toast ${copyToast || statusToast ? 'visible' : ''} ${statusToast ? 'toast-info' : ''}`}>
+            {statusToast ?? (copyToast ? 'Copied to clipboard' : '')}
+          </div>
           {actionToast ? (
             <ActionToast
               message={actionToast.message}

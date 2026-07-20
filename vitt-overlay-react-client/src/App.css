@@ -353,6 +353,99 @@
   background: rgba(255, 92, 92, 0.05);
 }
 
+.btn-primary.start-new-call.blocked {
+  opacity: 1;
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  cursor: pointer;
+}
+
+.btn-primary.start-new-call.blocked:disabled {
+  cursor: not-allowed;
+}
+
+.btn-primary.start-new-call.ready:not(:disabled) {
+  border-color: #22c55e;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.btn-primary.start-new-call.ready:not(:disabled):hover {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: #22c55e;
+}
+
+.connection-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 8px;
+}
+
+.connection-status-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.connection-status-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-glass);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.connection-status-icon.connected .connection-status-icon-wrap {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.connection-status-icon.disconnected .connection-status-icon-wrap {
+  color: #9ca3af;
+  border-color: rgba(156, 163, 175, 0.25);
+  background: rgba(156, 163, 175, 0.08);
+}
+
+.connection-status-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(20, 20, 23, 0.95);
+  border: 1px solid var(--border-glass);
+  color: var(--text-main);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  z-index: 20;
+}
+
+.connection-status-icon:hover .connection-status-tooltip,
+.connection-status-icon:focus-within .connection-status-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.data-info-lock-btn {
+  color: var(--accent);
+}
+
 /* ---------------------------------------------------------------------------
    List / Content
    --------------------------------------------------------------------------- */
@@ -636,6 +729,45 @@
   word-wrap: break-word;
   white-space: pre-wrap;
 }
+
+.chat-message-with-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-message-in.chat-message-with-copy,
+.chat-message-out.chat-message-with-copy {
+  padding: 10px 12px;
+}
+
+.chat-message-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-copy-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.msg-copy-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.14);
+}
+
 
 .chat-message-in {
   align-self: flex-start;
@@ -991,6 +1123,17 @@
 .toast.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.toast.toast-info {
+  background: rgba(20, 20, 23, 0.95);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
 }
 
 .toast.error {
