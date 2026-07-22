@@ -1562,7 +1562,9 @@ export default function App() {
           'scrape-data': {
             jobId: msg.jobId,
             url: msg.url,
-            error: msg.error
+            error: msg.error,
+            diagnostics: msg.diagnostics,
+            capture: msg.capture
           }
         })
         window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
@@ -1571,7 +1573,8 @@ export default function App() {
             url: msg.url,
             status: 'error',
             message: msg.error,
-            error: msg.error
+            error: msg.error,
+            likelyCause: msg.diagnostics?.likelyCause || null
           }
         }))
       }

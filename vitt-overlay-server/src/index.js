@@ -203,10 +203,68 @@ function printType3DevLog(capture) {
   }
   if (devLog.matchedPackage) {
     console.log('Matched package:', devLog.matchedPackage.name, devLog.matchedPackage.detail_url ? 'has URL' : 'NO URL');
+    if (devLog.matchedPackage.package_options?.length) {
+      console.log('Package options from page:');
+      for (const opt of devLog.matchedPackage.package_options) {
+        console.log(
+          `  [${opt.flight_type || '?'}] status=${opt.status} url=${opt.detail_url ? opt.detail_url.slice(0, 100) : '(none)'} label=${(opt.option_label || '').slice(0, 60)}`
+        );
+      }
+    }
   }
   console.log('Note: listing tab always closes with reason job_finished after scrape completes.');
   console.log('Note: detail tab flash + close is normal (URL intercept closes it immediately).');
   console.log('---\n');
+}
+
+function printType3ChainFailureDiagnostics(jobId, error, scrapeData = {}) {
+  const diagnostics = scrapeData.diagnostics || scrapeData['scrape-data']?.diagnostics;
+  const capture = scrapeData.capture || scrapeData['scrape-data']?.capture;
+
+  console.log('\n========== TYPE 3 → TYPE 4 CHAIN FAILURE ==========');
+  console.log(`jobId: ${jobId}`);
+  console.log(`error: ${error}`);
+
+  if (diagnostics) {
+    console.log(`likelyCause: ${diagnostics.likelyCause || 'unknown'}`);
+    console.log(`pageOutcome: ${diagnostics.pageOutcome || 'unknown'}`);
+    console.log(`packageResolved: ${diagnostics.packageResolved} name="${diagnostics.packageName || ''}"`);
+    console.log(`extractWithFlight: ${diagnostics.extractWithFlight} extractWithoutFlight: ${diagnostics.extractWithoutFlight}`);
+    if (diagnostics.targetCollection?.skippedOptions?.length) {
+      console.log('Skipped options (background filter):');
+      for (const s of diagnostics.targetCollection.skippedOptions) {
+        console.log(`  - ${s.reason}`, s.option_label || s.detail || '');
+      }
+    }
+    if (diagnostics.clickAttempts?.length) {
+      console.log('Click / intercept attempts (page):');
+      for (const c of diagnostics.clickAttempts) {
+        console.log(`  [${c.label}] ${c.reason} → ${c.url ? c.url.slice(0, 100) : '(no url)'}`);
+      }
+    } else {
+      console.log('Click / intercept attempts: (none — package may not have been matched or price box missing)');
+    }
+    if (diagnostics.pageEvents?.length) {
+      const keyEvents = diagnostics.pageEvents.filter((e) =>
+        /title_|price_box|variant_|search_exhausted|title_match_no_price/.test(e.type)
+      );
+      if (keyEvents.length) {
+        console.log('Key page events:');
+        for (const e of keyEvents) {
+          console.log(`  ${e.type}`, e.name || e.cardTitle || e.reason || e.label || e.url?.slice?.(0, 80) || '');
+        }
+      }
+    }
+    console.log('\nFull diagnostics JSON:');
+    console.log(JSON.stringify(diagnostics, null, 2));
+  } else if (capture?.devLog) {
+    console.log('(no structured diagnostics — printing capture.devLog)');
+    printType3DevLog(capture);
+  } else {
+    console.log('No diagnostics payload — check extension service worker console for [vitt-dev] logs');
+  }
+
+  console.log('===================================================\n');
 }
 
 function printType4Request(jobId, url, options) {
@@ -484,6 +542,9 @@ function onWsMessage(ws, msg) {
         jobs.get(jobId)?.pageType === 'mmt-listing-first-package' ||
         jobs.get(jobId)?.pageType === 'mmt-package') {
         console.log('[vitt-dev] status', jobId, status, message || '');
+        if (/type 4|package detail|intercept|listing page|extracting/i.test(String(message || ''))) {
+          console.log('[vitt-dev] status_detail', jobId, { status, message });
+        }
       }
       broadcast({
         type: 'job_update',
@@ -567,10 +628,41 @@ function onWsMessage(ws, msg) {
       const jobId = scrapeData.jobId ?? msg.jobId;
       const url = scrapeData.url ?? msg.url;
       const error = scrapeData.error ?? msg.error;
+      const jobPageType = jobs.get(jobId)?.pageType;
       console.log('[vitt-dev] scrape_error', jobId, error);
+      if (
+        jobPageType === 'mmt-listing-search' ||
+        jobPageType === 'mmt-listing-first-package' ||
+        /no package detail urls/i.test(String(error || ''))
+      ) {
+        printType3ChainFailureDiagnostics(jobId, error, scrapeData);
+      }
+      if (scrapeData.diagnostics?.likelyCause) {
+        console.log('[vitt-dev] type3_chain_likely_cause:', scrapeData.diagnostics.likelyCause);
+      }
+      saveJsonToCapture({
+        userid: msg.userid || null,
+        sessionid: msg.sessionid || null,
+        roomId: msg.roomId || null,
+        clientSource: msg.source || null,
+        'scrape-data': {
+          jobId,
+          type: 'scrape_error',
+          url,
+          error,
+          diagnostics: scrapeData.diagnostics || null,
+          capture: scrapeData.capture || null
+        }
+      });
       broadcast({
         type: 'job_update',
-        job: { jobId, url, status: 'error', error }
+        job: {
+          jobId,
+          url,
+          status: 'error',
+          error,
+          likelyCause: scrapeData.diagnostics?.likelyCause || null
+        }
       });
       break;
     }

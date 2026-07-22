@@ -204,8 +204,20 @@ function shouldCloseDetailTabAfterScrape(job) {
 }
 
 function deliverInterceptResult(openerTabId, url, reason) {
-  devLog('intercept_result', { openerTabId, reason, url: url ? url.slice(0, 120) : null });
-  chrome.tabs.sendMessage(openerTabId, { channel: 'intercept_result', url: url || null, reason }).catch(() => {});
+  devLog('intercept_result', {
+    openerTabId,
+    reason,
+    success: Boolean(url),
+    url: url ? url.slice(0, 120) : null,
+    pendingInterceptors: pendingInterceptors.size
+  });
+  chrome.tabs.sendMessage(openerTabId, { channel: 'intercept_result', url: url || null, reason }).catch((err) => {
+    devLog('intercept_result_delivery_failed', {
+      openerTabId,
+      reason,
+      error: err?.message || String(err)
+    });
+  });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -268,13 +280,24 @@ chrome.tabs.onCreated.addListener((tab) => {
   const openerId = tab.openerTabId;
   if (openerId && pendingInterceptors.has(openerId)) {
     markExtensionOpenedTab(tab.id);
-    devLog('intercept_tab_created', { openerTabId: openerId, detailTabId: tab.id, pendingUrl: tab.pendingUrl || tab.url || null });
+    devLog('intercept_tab_created', {
+      openerTabId: openerId,
+      detailTabId: tab.id,
+      pendingUrl: tab.pendingUrl || tab.url || null,
+      hasOpenerTabId: Boolean(tab.openerTabId)
+    });
     const interceptor = pendingInterceptors.get(openerId);
     pendingInterceptors.delete(openerId);
     clearTimeout(interceptor.timeout);
 
     const finish = (url, reason) => {
-      devLog('intercept_detail_tab_close', { openerTabId: openerId, detailTabId: tab.id, reason, url: url ? url.slice(0, 120) : null });
+      devLog('intercept_detail_tab_close', {
+        openerTabId: openerId,
+        detailTabId: tab.id,
+        reason,
+        success: Boolean(url),
+        url: url ? url.slice(0, 120) : null
+      });
       deliverInterceptResult(openerId, url, url ? 'ok' : reason || 'empty');
       chrome.tabs.remove(tab.id).catch(() => {});
     };
@@ -283,6 +306,7 @@ chrome.tabs.onCreated.addListener((tab) => {
     if (u && u !== 'about:blank' && !u.startsWith('chrome://')) {
       finish(u, 'immediate-url');
     } else {
+      devLog('intercept_waiting_for_url', { detailTabId: tab.id, openerTabId: openerId });
       const listener = (tabId, info, updatedTab) => {
         if (tabId === tab.id) {
           const url = info.url || updatedTab.url || updatedTab.pendingUrl;
@@ -295,9 +319,17 @@ chrome.tabs.onCreated.addListener((tab) => {
       chrome.tabs.onUpdated.addListener(listener);
       setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
+        devLog('intercept_tab_update_timeout', { detailTabId: tab.id, openerTabId: openerId });
         finish(null, 'tab-update-timeout');
       }, 3000);
     }
+  } else if (openerId) {
+    devLog('intercept_tab_created_no_pending', {
+      openerTabId: openerId,
+      detailTabId: tab.id,
+      pendingUrl: tab.pendingUrl || tab.url || null,
+      note: 'tab opened while no interceptor armed — click may have opened wrong tab or interceptor expired'
+    });
   }
 });
 
@@ -938,13 +970,19 @@ function isType5ListingJob(job, scrapeOpts, capture) {
 }
 
 /** Collect package detail URLs from listing result (both variants when present). */
-function collectPackageDetailTargets(listingPkg, job) {
-  if (!listingPkg) return [];
+function collectPackageDetailTargets(listingPkg, job, diagnostics = null) {
+  if (!listingPkg) {
+    if (diagnostics) {
+      diagnostics.failurePhase = 'no_listing_package';
+      diagnostics.skippedOptions.push({ reason: 'no_listing_package', detail: 'resolveFirstListingPackage returned null' });
+    }
+    return [];
+  }
 
   const targets = [];
   const seen = new Set();
 
-  const add = (detail_url, option_label, flight_type) => {
+  const add = (detail_url, option_label, flight_type, source) => {
     const url = String(detail_url || '').trim();
     if (!url || seen.has(url)) return;
     seen.add(url);
@@ -952,28 +990,161 @@ function collectPackageDetailTargets(listingPkg, job) {
       detail_url: url,
       option_label: option_label || flight_type || 'package',
       flight_type: flight_type || 'default',
-      variant: flight_type || 'default'
+      variant: flight_type || 'default',
+      source
     });
+    if (diagnostics) {
+      diagnostics.acceptedTargets.push({
+        source,
+        flight_type: flight_type || 'default',
+        option_label: option_label || flight_type || 'package',
+        detail_url: url.slice(0, 160)
+      });
+    }
   };
 
-  for (const opt of listingPkg.package_options || []) {
-    if (!opt.detail_url || opt.status === 'sold out') continue;
+  const packageOptions = listingPkg.package_options || [];
+  if (diagnostics) diagnostics.packageOptionCount = packageOptions.length;
+
+  for (const opt of packageOptions) {
     const label = String(opt.option_label || '').toLowerCase();
-    const isWithFlight = label.includes('with flight');
-    const isWithoutFlight = label.includes('without flight');
-    if (isWithFlight && job.extractWithFlight === false) continue;
-    if (isWithoutFlight && job.extractWithoutFlight === false) continue;
+    const isWithFlight = label.includes('with flight') || opt.flight_type === 'withFlight';
+    const isWithoutFlight = label.includes('without flight') || opt.flight_type === 'withoutFlight';
+
+    if (!opt.detail_url) {
+      if (diagnostics) {
+        diagnostics.skippedOptions.push({
+          reason: 'missing_detail_url',
+          option_label: opt.option_label,
+          status: opt.status,
+          flight_type: opt.flight_type
+        });
+      }
+      continue;
+    }
+    if (opt.status === 'sold out') {
+      if (diagnostics) {
+        diagnostics.skippedOptions.push({
+          reason: 'sold_out',
+          option_label: opt.option_label,
+          flight_type: opt.flight_type
+        });
+      }
+      continue;
+    }
+    if (isWithFlight && job.extractWithFlight === false) {
+      if (diagnostics) {
+        diagnostics.skippedOptions.push({
+          reason: 'extractWithFlight_disabled',
+          option_label: opt.option_label,
+          detail_url: opt.detail_url.slice(0, 160)
+        });
+      }
+      continue;
+    }
+    if (isWithoutFlight && job.extractWithoutFlight === false) {
+      if (diagnostics) {
+        diagnostics.skippedOptions.push({
+          reason: 'extractWithoutFlight_disabled',
+          option_label: opt.option_label,
+          detail_url: opt.detail_url.slice(0, 160)
+        });
+      }
+      continue;
+    }
     const flight_type =
       opt.flight_type ||
       (isWithFlight ? 'withFlight' : isWithoutFlight ? 'withoutFlight' : 'default');
-    add(opt.detail_url, opt.option_label, flight_type);
+    add(opt.detail_url, opt.option_label, flight_type, 'package_option');
   }
 
   if (!targets.length && listingPkg.detail_url) {
-    add(listingPkg.detail_url, listingPkg.name || 'package', listingPkg.flight_type || 'default');
+    add(listingPkg.detail_url, listingPkg.name || 'package', listingPkg.flight_type || 'default', 'listing_detail_url');
+  } else if (!targets.length && !listingPkg.detail_url && diagnostics) {
+    diagnostics.skippedOptions.push({
+      reason: 'no_listing_detail_url',
+      detail: 'package_options empty and listingPkg.detail_url missing'
+    });
+  }
+
+  if (diagnostics) {
+    diagnostics.targetCount = targets.length;
+    if (!targets.length) {
+      diagnostics.failurePhase = diagnostics.failurePhase || 'no_detail_urls_after_filter';
+    }
   }
 
   return targets;
+}
+
+/** Build a structured diagnostic snapshot for Type 3 → Type 4 chain failures. */
+function buildType3ChainDiagnostics(job, capture, listingPkg, targetDiagnostics) {
+  const pageDevLog = capture?.devLog || {};
+  return {
+    phase: 'type3_to_type4_chain',
+    jobId: job.jobId,
+    scrapeMode: job.scrapeMode,
+    searchPackageName: job.searchPackageName || null,
+    extractPackageDetail: job.extractPackageDetail === true,
+    extractWithFlight: job.extractWithFlight,
+    extractWithoutFlight: job.extractWithoutFlight,
+    waitMs: job.waitMs ?? null,
+    pageOutcome: pageDevLog.outcome || 'unknown',
+    cardCount: capture?.cardCount ?? null,
+    totalCardsInDom: pageDevLog.totalCardsInDom ?? null,
+    totalRounds: pageDevLog.totalRounds ?? null,
+    packageResolved: Boolean(listingPkg),
+    packageName: listingPkg?.name || null,
+    packageDuration: listingPkg?.duration || null,
+    listingDetailUrl: listingPkg?.detail_url || null,
+    packageOptions: (listingPkg?.package_options || []).map((opt) => ({
+      option_label: opt.option_label,
+      detail_url: opt.detail_url ? opt.detail_url.slice(0, 160) : '',
+      status: opt.status,
+      flight_type: opt.flight_type
+    })),
+    targetCollection: targetDiagnostics,
+    pageEvents: pageDevLog.events || [],
+    clickAttempts: pageDevLog.clicks || [],
+    likelyCause: inferType3ChainFailureCause(listingPkg, targetDiagnostics, pageDevLog)
+  };
+}
+
+function inferType3ChainFailureCause(listingPkg, targetDiagnostics, pageDevLog) {
+  if (!listingPkg) {
+    const outcome = pageDevLog.outcome || 'unknown';
+    if (outcome === 'not_found') return 'package_title_not_matched_on_listing_page';
+    return 'listing_package_not_resolved_from_capture';
+  }
+  if ((pageDevLog.clicks || []).some((c) => c.reason === 'intercept_not_ready')) {
+    return 'tab_intercept_not_ready_background_worker';
+  }
+  if ((pageDevLog.clicks || []).some((c) => c.reason === 'click_timeout' || c.reason === 'timeout')) {
+    return 'tab_intercept_timed_out_click_did_not_open_detail_tab';
+  }
+  if ((pageDevLog.events || []).some((e) => e.type === 'title_match_no_price_box')) {
+    return 'matched_package_but_price_box_selector_missing';
+  }
+  const skipped = targetDiagnostics?.skippedOptions || [];
+  if (skipped.some((s) => s.reason === 'sold_out')) {
+    return 'matched_variant_sold_out';
+  }
+  if (skipped.some((s) => s.reason === 'extractWithFlight_disabled' || s.reason === 'extractWithoutFlight_disabled')) {
+    return 'detail_url_exists_but_filtered_by_extractWithFlight_extractWithoutFlight_flags';
+  }
+  if ((listingPkg.package_options || []).length === 0 && !listingPkg.detail_url) {
+    return 'price_box_and_variant_clicks_did_not_capture_urls';
+  }
+  return 'unknown_review_clickAttempts_and_pageEvents';
+}
+
+function logType3ChainDiagnostics(job, capture, listingPkg, targetDiagnostics, context) {
+  const diagnostics = buildType3ChainDiagnostics(job, capture, listingPkg, targetDiagnostics);
+  devLog('type3_chain_diagnostics', { context, ...diagnostics });
+  console.log('\n[vitt-dev] ========== TYPE 3 → TYPE 4 CHAIN DIAGNOSTICS ==========');
+  console.log(JSON.stringify(diagnostics, null, 2));
+  console.log('[vitt-dev] ========================================================\n');
+  return diagnostics;
 }
 
 async function runPackageDetailScrape(parentJob, target, onProgress) {
@@ -1038,25 +1209,69 @@ async function runPackageDetailScrape(parentJob, target, onProgress) {
 async function streamPackageDetailsFromListing(job, capture, jobDevLog, onProgress, listingUrl) {
   normalizeFirstListingCapture(capture);
   const listingPkg = resolveFirstListingPackage(capture);
-  const targets = collectPackageDetailTargets(listingPkg, job);
+  const targetDiagnostics = {
+    failurePhase: null,
+    packageOptionCount: 0,
+    targetCount: 0,
+    acceptedTargets: [],
+    skippedOptions: []
+  };
+  const targets = collectPackageDetailTargets(listingPkg, job, targetDiagnostics);
 
   if (!targets.length) {
-    jobDevLog.events.push({ type: 'package_detail_skipped', reason: 'no_urls' });
+    const chainDiagnostics = logType3ChainDiagnostics(
+      job,
+      capture,
+      listingPkg,
+      targetDiagnostics,
+      'no_detail_urls_before_type4'
+    );
+    jobDevLog.events.push({
+      type: 'package_detail_skipped',
+      reason: 'no_urls',
+      likelyCause: chainDiagnostics.likelyCause,
+      failurePhase: targetDiagnostics.failurePhase,
+      packageName: listingPkg?.name || null,
+      pageOutcome: capture?.devLog?.outcome || null,
+      clickAttemptCount: (capture?.devLog?.clicks || []).length,
+      skippedOptionCount: targetDiagnostics.skippedOptions.length
+    });
     sendBridgeEvent({
       type: 'scrape_error',
       jobId: job.jobId,
       url: listingUrl,
-      error: 'No package detail URLs found for first listing card'
+      error: 'No package detail URLs found for first listing card',
+      diagnostics: chainDiagnostics,
+      capture: {
+        pageType: capture?.pageType,
+        cardCount: capture?.cardCount,
+        listingPackages: capture?.listingPackages,
+        devLog: capture?.devLog
+      }
     });
     return capture;
   }
+
+  devLog('type4_chain_starting', {
+    jobId: job.jobId,
+    targetCount: targets.length,
+    targets: targets.map((t) => ({
+      flight_type: t.flight_type,
+      source: t.source,
+      detail_url: t.detail_url.slice(0, 120)
+    }))
+  });
 
   jobDevLog.events.push({
     type: 'package_detail_targets',
     count: targets.length,
     closeDetailTabAfterScrape: job.closeDetailTabAfterScrape,
     willCloseDetailTabs: shouldCloseDetailTabAfterScrape(job),
-    targets: targets.map((t) => ({ flight_type: t.flight_type, detail_url: t.detail_url.slice(0, 120) }))
+    targets: targets.map((t) => ({
+      flight_type: t.flight_type,
+      source: t.source,
+      detail_url: t.detail_url.slice(0, 120)
+    }))
   });
 
   if (onProgress) {
@@ -1069,7 +1284,20 @@ async function streamPackageDetailsFromListing(job, capture, jobDevLog, onProgre
         if (onProgress) {
           void onProgress(`Type 4 (${target.flight_type}): ${target.detail_url.slice(0, 80)}…`);
         }
+        devLog('type4_scrape_start', {
+          jobId: job.jobId,
+          flight_type: target.flight_type,
+          source: target.source,
+          detail_url: target.detail_url.slice(0, 120)
+        });
         const detailCapture = await runPackageDetailScrape(job, target, onProgress);
+        devLog('type4_scrape_done', {
+          jobId: job.jobId,
+          flight_type: target.flight_type,
+          pageType: detailCapture?.pageType,
+          hasError: Boolean(detailCapture?.error),
+          htmlLen: detailCapture?.html?.length || 0
+        });
         await sendBridgeEvent({
           type: 'scrape_result',
           jobId: job.jobId,
@@ -1307,13 +1535,30 @@ async function runScrapeJob(job) {
     if (job.scrapeMode === 'mmt-listing-search') {
       normalizeFirstListingCapture(capture);
       capture.devLog = { ...(capture.devLog || {}), background: jobDevLog };
+      const listingPkg = resolveFirstListingPackage(capture);
       note('scrape_script_done', {
         pageType: capture.pageType,
         listingPackageCount: capture.listingPackages?.length || 0,
-        hasDetailUrl: Boolean(resolveFirstListingPackage(capture)?.detail_url),
-        packageOptions: resolveFirstListingPackage(capture)?.package_options?.length || 0,
-        extractPackageDetail: job.extractPackageDetail === true
+        hasDetailUrl: Boolean(listingPkg?.detail_url),
+        packageOptions: listingPkg?.package_options?.length || 0,
+        extractPackageDetail: job.extractPackageDetail === true,
+        pageOutcome: capture.devLog?.outcome || null,
+        searchPackageName: job.searchPackageName || null,
+        matchedPackageName: listingPkg?.name || null,
+        clickAttemptCount: (capture.devLog?.clicks || []).length
       });
+
+      if (!listingPkg) {
+        logType3ChainDiagnostics(job, capture, null, { skippedOptions: [{ reason: 'no_listing_package' }] }, 'listing_scrape_no_package');
+      } else if (!listingPkg.detail_url && !(listingPkg.package_options || []).some((o) => o.detail_url)) {
+        logType3ChainDiagnostics(
+          job,
+          capture,
+          listingPkg,
+          { skippedOptions: [{ reason: 'no_urls_in_listing_capture' }] },
+          'listing_scrape_no_urls_in_page'
+        );
+      }
 
       // Type 3: listing is internal only (find URLs) — do not send listing scrape_result to backend.
       note('listing_result_skipped', { reason: 'type3_detail_only' });
@@ -1327,6 +1572,11 @@ async function runScrapeJob(job) {
       }
 
       if (job.extractPackageDetail === true) {
+        note('type4_chain_start', {
+          matchedPackage: listingPkg?.name || null,
+          hasDetailUrl: Boolean(listingPkg?.detail_url),
+          packageOptionCount: listingPkg?.package_options?.length || 0
+        });
         await streamPackageDetailsFromListing(
           job,
           capture,

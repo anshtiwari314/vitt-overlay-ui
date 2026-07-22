@@ -468,6 +468,9 @@ app.whenReady().then(() => {
       console.log(`[scrape] extension → electron: ${payload.status} ${payload.jobId} — ${payload.message || ''}`);
     } else if (payload.type === 'scrape_error') {
       console.log(`[scrape] extension → electron: error ${payload.jobId} ${payload.error}`);
+      if (payload.diagnostics?.likelyCause) {
+        console.log('[vitt-dev] type3_chain_likely_cause:', payload.diagnostics.likelyCause);
+      }
     }
     sendScrapeBridgeEvent(payload);
   });

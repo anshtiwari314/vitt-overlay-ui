@@ -469,10 +469,18 @@
       // Type 3: match only .packageHead title (not full card body — avoids itinerary false positives)
       if (opts.scrapeMode === 'mmt-listing-search' && opts.searchPackageName) {
         if (!allWordsPresent(name, opts.searchPackageName)) {
+          if (devLog && roundNum === 0) {
+            devLog.events.push({
+              type: 'title_mismatch',
+              round: roundNum,
+              cardTitle: name,
+              searchPackageName: opts.searchPackageName
+            });
+          }
           card.dataset.vittResolved = 'true';
           continue;
         }
-        if (devLog) devLog.events.push({ type: 'title_matched', round: roundNum, name });
+        if (devLog) devLog.events.push({ type: 'title_matched', round: roundNum, name, searchPackageName: opts.searchPackageName });
       }
 
       await closeModals();
@@ -491,13 +499,24 @@
       const package_options = [];
 
       // Try capturing tab directly from price box (No variant scenario)
+      if (devLog) devLog.events.push({ type: 'price_box_click_start', round: roundNum, name });
       const urlFromPrice = await interceptTabUrl(priceBox, 1500, 'price_box');
       if (urlFromPrice) {
         detail_url = urlFromPrice;
+        if (devLog) devLog.events.push({ type: 'price_box_url_captured', round: roundNum, url: urlFromPrice.slice(0, 160) });
       } else {
+        if (devLog) devLog.events.push({ type: 'price_box_no_url', round: roundNum, next: 'try_variant_modal' });
         await sleep(600); // Give modal time to appear
         const variantEls = document.querySelectorAll('.variant-card-container.pointer, .variant-card-container');
         const activeVariants = variantEls.length > 0 ? variantEls : card.querySelectorAll('.variant-card-container');
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_modal_state',
+            round: roundNum,
+            globalVariantCount: variantEls.length,
+            cardVariantCount: activeVariants.length
+          });
+        }
 
         for (const [index, variant] of activeVariants.entries()) {
           const variantText = (variant.innerText || '').toLowerCase();
@@ -505,12 +524,51 @@
           const isWithFlight = variantText.includes('with flight');
           const isWithoutFlight = variantText.includes('without flight');
 
-          if (isWithFlight && opts.extractWithFlight === false) continue;
-          if (isWithoutFlight && opts.extractWithoutFlight === false) continue;
+          if (isWithFlight && opts.extractWithFlight === false) {
+            if (devLog) {
+              devLog.events.push({
+                type: 'variant_skipped',
+                round: roundNum,
+                index: index + 1,
+                reason: 'extractWithFlight_disabled',
+                label: (variant.innerText || '').slice(0, 80)
+              });
+            }
+            continue;
+          }
+          if (isWithoutFlight && opts.extractWithoutFlight === false) {
+            if (devLog) {
+              devLog.events.push({
+                type: 'variant_skipped',
+                round: roundNum,
+                index: index + 1,
+                reason: 'extractWithoutFlight_disabled',
+                label: (variant.innerText || '').slice(0, 80)
+              });
+            }
+            continue;
+          }
 
           let vUrl = '';
           if (!isSoldOut) {
+            if (devLog) devLog.events.push({ type: 'variant_click_start', round: roundNum, index: index + 1, label: (variant.innerText || '').slice(0, 80) });
             vUrl = await interceptTabUrl(variant, 2500, `variant_${index + 1}`);
+            if (devLog) {
+              devLog.events.push({
+                type: vUrl ? 'variant_url_captured' : 'variant_click_no_url',
+                round: roundNum,
+                index: index + 1,
+                url: vUrl ? vUrl.slice(0, 160) : null
+              });
+            }
+          } else if (devLog) {
+            devLog.events.push({
+              type: 'variant_skipped',
+              round: roundNum,
+              index: index + 1,
+              reason: 'sold_out',
+              label: (variant.innerText || '').slice(0, 80)
+            });
           }
 
           const flight_type = isWithFlight
@@ -663,6 +721,12 @@
       if (devLog && devLog.outcome === 'not_found') {
         devLog.totalCardsInDom = countCards();
         devLog.totalRounds = devLog.rounds.length;
+        devLog.events.push({
+          type: 'search_exhausted',
+          searchPackageName: opts.searchPackageName || '',
+          cardsInDom: devLog.totalCardsInDom,
+          rounds: devLog.totalRounds
+        });
       }
     }
   }
