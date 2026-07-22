@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Vitt Page Capture",
+  "name": "Vitt-test",
   "version": "1.4.4",
   "description": "Manual page capture to vitt-overlay-server plus automated scroll-and-extract via Vitt Overlay.",
   "permissions": ["tabs", "scripting", "storage", "alarms", "activeTab", "offscreen"],
@@ -15,6 +15,27 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://holidayz.makemytrip.com/holidays/diyPlanner*"
+      ],
+      "js": [
+        "injected/mmt-itinerary-interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://holidayz.makemytrip.com/holidays/diyPlanner*"
+      ],
+      "js": [
+        "injected/mmt-itinerary-bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
   "action": {
     "default_title": "Capture this page",
     "default_popup": "popup.html"
