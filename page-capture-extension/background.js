@@ -1,3 +1,10 @@
+import {
+  initListenerController,
+  handleListenerTabUpdated,
+  handleListenerTabRemoved,
+  handleListenerPriceChange
+} from './listeners/listener-controller.js';
+
 const DEFAULT_BRIDGE_WS = 'ws://127.0.0.1:38772';
 
 const DEFAULT_CONCURRENCY = 3;
@@ -19,7 +26,16 @@ const queue = [];
 
 let activeWorkers = 0;
 
+/** Tabs opened by automated scrape jobs — skip passive URL listeners on these. */
+const extensionOpenedTabIds = new Set();
 
+function markExtensionOpenedTab(tabId) {
+  if (tabId != null) extensionOpenedTabIds.add(tabId);
+}
+
+function isExtensionOpenedTab(tabId) {
+  return extensionOpenedTabIds.has(tabId);
+}
 
 function normalizeBridgeWsUrl(input) {
 
@@ -222,6 +238,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (handleListenerPriceChange(msg, sender)) return;
+
   if (msg?.channel !== 'bridge') return;
 
   if (msg.type === 'status') {
@@ -236,9 +254,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  void handleListenerTabUpdated(tabId, changeInfo, tab);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  extensionOpenedTabIds.delete(tabId);
+  handleListenerTabRemoved(tabId);
+});
+
 chrome.tabs.onCreated.addListener((tab) => {
   const openerId = tab.openerTabId;
   if (openerId && pendingInterceptors.has(openerId)) {
+    markExtensionOpenedTab(tab.id);
     devLog('intercept_tab_created', { openerTabId: openerId, detailTabId: tab.id, pendingUrl: tab.pendingUrl || tab.url || null });
     const interceptor = pendingInterceptors.get(openerId);
     pendingInterceptors.delete(openerId);
@@ -668,6 +696,7 @@ async function extractScrapeFromTab(tabId, job, onProgress) {
 
 async function openListingPageTab(job, onProgress, { active = false } = {}) {
   const tab = await chrome.tabs.create({ url: job.url, active });
+  markExtensionOpenedTab(tab.id);
   const loadTimeout = isListingScrapeMode(job.scrapeMode) ? 180000 : 45000;
   await waitForTabLoad(tab.id, loadTimeout, (message) => {
     if (onProgress) void onProgress(message);
@@ -965,6 +994,7 @@ async function runPackageDetailScrape(parentJob, target, onProgress) {
 
     const tab = await chrome.tabs.create({ url: target.detail_url, active: false });
     tabId = tab.id;
+    markExtensionOpenedTab(tabId);
 
     await waitForTabLoad(tabId, 180000, (message) => {
       if (onProgress) void onProgress(message);
@@ -1180,6 +1210,7 @@ async function runScrapeJob(job) {
     const tab = await chrome.tabs.create({ url: job.url, active: true });
 
     tabId = tab.id;
+    markExtensionOpenedTab(tabId);
     note('listing_tab_opened', { tabId });
 
     const loadTimeout =
@@ -1463,6 +1494,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 
+
+initListenerController({
+  extractScrapeFromTab,
+  ensureBridgeConnected,
+  sendBridgeEvent,
+  emitStatus,
+  devLog,
+  isExtensionOpenedTab
+});
 
 void startBridge().then(scheduleKeepaliveAlarm);
 
