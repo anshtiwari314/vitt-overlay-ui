@@ -17,6 +17,27 @@
   },
   "content_scripts": [
     {
+      "matches": [
+        "https://holidayz.makemytrip.com/holidays/diyPlanner*"
+      ],
+      "js": [
+        "injected/mmt-itinerary-interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://holidayz.makemytrip.com/holidays/diyPlanner*"
+      ],
+      "js": [
+        "injected/mmt-itinerary-bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "content_scripts": [
+    {
       "matches": ["https://holidayz.makemytrip.com/holidays/diyPlanner*"],
       "js": ["injected/mmt-itinerary-interceptor.js"],
       "run_at": "document_start",
