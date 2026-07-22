@@ -7,7 +7,6 @@ import {
 import { initDiyPlannerHandler, handleSaveItineraryId } from './listeners/diy-planner-handler.js';
 
 const DEFAULT_BRIDGE_WS = 'ws://127.0.0.1:38772';
-const MMT_BACKEND_ENDPOINT = 'http://127.0.0.1:5000/api/itinerary';
 
 const DEFAULT_CONCURRENCY = 3;
 
@@ -153,57 +152,6 @@ function sendBridgeEvent(payload) {
   return sendBridgeCommand('send', { payload });
 }
 
-async function sendMmtItineraryToBackend(itineraryData) {
-  const payload = {
-    itineraryId: itineraryData.itineraryId,
-    message: 'Itinerary created successfully',
-    pageUrl: itineraryData.pageUrl,
-    capturedAt: itineraryData.capturedAt
-  };
-
-  try {
-    console.log('[mmt-itinerary] sending_to_backend', payload);
-
-    const response = await fetch(MMT_BACKEND_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const responseText = await response.text();
-      console.error(
-        '[mmt-itinerary] backend_failed',
-        response.status,
-        response.statusText,
-        responseText
-      );
-      return {
-        ok: false,
-        status: response.status,
-        statusText: response.statusText,
-        responseText
-      };
-    }
-
-    console.log('[mmt-itinerary] backend_notified', itineraryData.itineraryId);
-    return {
-      ok: true,
-      status: response.status
-    };
-  } catch (error) {
-    console.error('[mmt-itinerary] backend_error', error);
-    return {
-      ok: false,
-      error: String(error)
-    };
-  }
-}
-
-
-
 async function emitStatus(job, status, message) {
 
   sendBridgeEvent({
@@ -261,63 +209,7 @@ function deliverInterceptResult(openerTabId, url, reason) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type === 'SAVE_ITINERARY_ID') {
-    const senderUrl = sender.tab?.url || '';
-    const isAllowedPage = senderUrl.startsWith(
-      'https://holidayz.makemytrip.com/holidays/diyPlanner'
-    );
-
-    if (!isAllowedPage) {
-      sendResponse({
-        ok: false,
-        error: 'Message received from invalid page'
-      });
-      return false;
-    }
-
-    const itineraryData = {
-      itineraryId: msg.itineraryId,
-      pageUrl: msg.pageUrl,
-      capturedAt: msg.capturedAt
-    };
-
-    (async () => {
-      await chrome.storage.local.set({
-        mmtLastItinerary: itineraryData
-      });
-
-      const backendResult = await sendMmtItineraryToBackend(itineraryData);
-
-      await chrome.storage.local.set({
-        mmtLastBackendAttempt: {
-          itineraryId: itineraryData.itineraryId,
-          attemptedAt: new Date().toISOString(),
-          endpoint: MMT_BACKEND_ENDPOINT,
-          result: backendResult
-        }
-      });
-
-      sendResponse(backendResult);
-    })().catch(async (error) => {
-      const failure = {
-        ok: false,
-        error: String(error)
-      };
-
-      await chrome.storage.local.set({
-        mmtLastBackendAttempt: {
-          itineraryId: itineraryData.itineraryId,
-          attemptedAt: new Date().toISOString(),
-          endpoint: MMT_BACKEND_ENDPOINT,
-          result: failure
-        }
-      });
-
-      sendResponse(failure);
-    });
-
-    return true;
-  }
+  if (handleSaveItineraryId(msg, sender, sendResponse)) return;
 
   if (msg?.channel === 'intercept_next_tab') {
     const tabId = sender.tab?.id;
@@ -348,8 +240,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (handleListenerPriceChange(msg, sender)) return;
-
-  if (handleSaveItineraryId(msg, sender, sendResponse)) return;
 
   if (msg?.channel !== 'bridge') return;
 
