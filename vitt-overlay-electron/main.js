@@ -456,7 +456,8 @@ app.whenReady().then(() => {
       console.log(`[scrape] extension → electron: result (${via}) ${payload.jobId}`);
       console.log('[vitt-dev] result', {
         jobId: payload.jobId,
-        pageType: payload.capture?.pageType,
+        pageType: payload.capture?.pageType ?? payload.pageType,
+        itineraryId: payload.capture?.pageType === 'mmt-diy-planner' ? payload.capture?.itineraryId : undefined,
         packageName: pkg?.name,
         detail_url: pkg?.detail_url?.slice(0, 80),
         outcome: payload.capture?.devLog?.outcome,

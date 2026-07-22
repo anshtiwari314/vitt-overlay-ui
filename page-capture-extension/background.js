@@ -4,6 +4,7 @@ import {
   handleListenerTabRemoved,
   handleListenerPriceChange
 } from './listeners/listener-controller.js';
+import { initDiyPlannerHandler, handleSaveItineraryId } from './listeners/diy-planner-handler.js';
 
 const DEFAULT_BRIDGE_WS = 'ws://127.0.0.1:38772';
 
@@ -239,6 +240,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (handleListenerPriceChange(msg, sender)) return;
+
+  if (handleSaveItineraryId(msg, sender, sendResponse)) return;
 
   if (msg?.channel !== 'bridge') return;
 
@@ -1502,6 +1505,12 @@ initListenerController({
   emitStatus,
   devLog,
   isExtensionOpenedTab
+});
+
+initDiyPlannerHandler({
+  ensureBridgeConnected,
+  sendBridgeEvent,
+  devLog
 });
 
 void startBridge().then(scheduleKeepaliveAlarm);

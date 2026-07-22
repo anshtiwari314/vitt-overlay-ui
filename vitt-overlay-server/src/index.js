@@ -299,6 +299,20 @@ function printType4Response(jobId, pageType, capture, meta = {}) {
   console.log('=====================================\n');
 }
 
+function printDiyPlannerResponse(jobId, capture, meta = {}) {
+  console.log('\n========== DIY PLANNER ITINERARY RESPONSE ==========');
+  console.log(JSON.stringify({
+    jobId,
+    pageType: capture?.pageType || 'mmt-diy-planner',
+    resultPhase: meta.resultPhase || 'itinerary_created',
+    url: capture?.url,
+    itineraryId: capture?.itineraryId || null,
+    capturedAt: capture?.capturedAt || null,
+    message: capture?.message || null
+  }, null, 2));
+  console.log('====================================================\n');
+}
+
 function printListingChainListingResponse(jobId, capture, listingUrl) {
   const pkg =
     capture?.listingPackages?.[0] ||
@@ -518,6 +532,8 @@ function onWsMessage(ws, msg) {
         }
       } else if (capturePageType === 'mmt-package') {
         printType4Response(jobId, capturePageType, capture, { resultPhase });
+      } else if (capturePageType === 'mmt-diy-planner') {
+        printDiyPlannerResponse(jobId, capture, { resultPhase });
       } else if (capturePageType === 'mmt-listing-search') {
         printListingChainListingResponse(jobId, capture, listingUrl);
       }
@@ -528,7 +544,9 @@ function onWsMessage(ws, msg) {
           ? 'listing_done'
           : resultPhase === 'package_detail'
             ? 'package_detail_done'
-            : 'done';
+            : resultPhase === 'itinerary_created'
+              ? 'itinerary_created_done'
+              : 'done';
       broadcast({
         type: 'job_update',
         job: {
