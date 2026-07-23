@@ -109,6 +109,32 @@ function resolveOverlayRoomId(
   return activeMeetingId ?? meetings[0]?.id ?? userid ?? ''
 }
 
+type TicketContext = { ticket_id: string; client_mob_no: string }
+
+function readTicketContext(
+  dataInfoItems: DataInfoField[],
+  pending?: TicketContext | null
+): TicketContext {
+  return {
+    ticket_id:
+      pending?.ticket_id ??
+      dataInfoItems.find((item) => item.id === 'ticket_id')?.value?.trim() ??
+      '',
+    client_mob_no:
+      pending?.client_mob_no ??
+      dataInfoItems.find((item) => item.id === 'client_mob_no')?.value?.trim() ??
+      '',
+  }
+}
+
+function sendOverlayWs(
+  ws: WebSocket,
+  payload: Record<string, unknown>,
+  ticketContext: TicketContext
+) {
+  ws.send(JSON.stringify({ ...ticketContext, ...payload }))
+}
+
 /** Single shared WebSocket for the app so only one connection exists. */
 let appSharedWs: WebSocket | null = null
 
@@ -711,11 +737,13 @@ function MergedAiAssistTab({
   userid,
   sessionid,
   source,
+  getTicketContext,
   onCopy
 }: {
   userid: string
   sessionid: string
   source?: string
+  getTicketContext: () => TicketContext
   onCopy: (value: string) => void
 }) {
   const dispatch = useDispatch()
@@ -794,16 +822,14 @@ function MergedAiAssistTab({
 
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(
-        JSON.stringify({
-          type: 'chat-with-ai',
-          source,
-          userid,
-          sessionid,
-          query,
-          timestamp
-        })
-      )
+      sendOverlayWs(ws, {
+        type: 'chat-with-ai',
+        source,
+        userid,
+        sessionid,
+        query,
+        timestamp
+      }, getTicketContext())
     } else {
       dispatch(
         addIncomingMessages({
@@ -954,18 +980,16 @@ export default function App() {
               meetingsRef.current,
               currentUserRef.current?.userid ?? currentUserRef.current?.id ?? ''
             )
-            ws.send(
-              JSON.stringify({
-                type: 'data-info-update-req',
-                source: currentUserRef.current?.source ?? '',
-                userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
-                sessionid: sessionuidRef.current ?? '',
-                roomId,
-                roomid: roomId,
-                data_info: updated,
-                timestamp: getTimeStamp()
-              })
-            )
+            sendOverlayWs(ws, {
+              type: 'data-info-update-req',
+              source: currentUserRef.current?.source ?? '',
+              userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+              sessionid: sessionuidRef.current ?? '',
+              roomId,
+              roomid: roomId,
+              data_info: updated,
+              timestamp: getTimeStamp()
+            }, readTicketContext(dataInfoItemsRef.current, pendingInitFieldsRef.current))
             lastSentDataRef.current = currentDataStr
           }
         }
@@ -1037,31 +1061,22 @@ export default function App() {
       meetingsRef.current,
       initUserid
     )
-    const pending = pendingInitFieldsRef.current
-    const ticketId =
-      pending?.ticket_id ??
-      dataInfoItemsRef.current.find((item) => item.id === 'ticket_id')?.value?.trim() ??
-      ''
-    const clientMobNo =
-      pending?.client_mob_no ??
-      dataInfoItemsRef.current.find((item) => item.id === 'client_mob_no')?.value?.trim() ??
-      ''
+    const ticketContext = readTicketContext(
+      dataInfoItemsRef.current,
+      pendingInitFieldsRef.current
+    )
     pendingInitFieldsRef.current = null
 
-    ws.send(
-      JSON.stringify({
-        type: 'client-init',
-        message: 'Hello from browser!',
-        source: currentUserRef.current?.source ?? '',
-        userid: initUserid,
-        sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
-        roomId,
-        roomid: roomId,
-        ticket_id: ticketId,
-        client_mob_no: clientMobNo,
-        timestamp: getTimeStamp()
-      })
-    )
+    sendOverlayWs(ws, {
+      type: 'client-init',
+      message: 'Hello from browser!',
+      source: currentUserRef.current?.source ?? '',
+      userid: initUserid,
+      sessionid: currentUserRef.current?.sessionuid ?? fallbackSessionIdRef.current,
+      roomId,
+      roomid: roomId,
+      timestamp: getTimeStamp()
+    }, ticketContext)
   }, [])
 
   const sendClientInitRef = useRef(sendClientInit)
@@ -1097,6 +1112,11 @@ export default function App() {
   }, [wsUrl, source, userid, connectionSessionId])
 
   const effectiveRoomId = resolveOverlayRoomId(activeMeetingId, meetings, userid)
+
+  const getTicketContext = useCallback(
+    () => readTicketContext(dataInfoItemsRef.current, pendingInitFieldsRef.current),
+    []
+  )
 
   useEffect(() => {
     console.log(
@@ -1508,7 +1528,11 @@ export default function App() {
     const sendOnWs = (payload: Record<string, unknown>) => {
       const ws = appSharedWs ?? (wsRef as React.MutableRefObject<WebSocket | null>).current
       if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload))
+        sendOverlayWs(
+          ws,
+          payload,
+          readTicketContext(dataInfoItemsRef.current, pendingInitFieldsRef.current)
+        )
       }
     }
 
@@ -1562,9 +1586,7 @@ export default function App() {
           'scrape-data': {
             jobId: msg.jobId,
             url: msg.url,
-            error: msg.error,
-            diagnostics: msg.diagnostics,
-            capture: msg.capture
+            error: msg.error
           }
         })
         window.dispatchEvent(new CustomEvent(SCRAPE_JOB_UPDATE_EVENT, {
@@ -1573,8 +1595,7 @@ export default function App() {
             url: msg.url,
             status: 'error',
             message: msg.error,
-            error: msg.error,
-            likelyCause: msg.diagnostics?.likelyCause || null
+            error: msg.error
           }
         }))
       }
@@ -1607,17 +1628,15 @@ export default function App() {
     const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
     if (ws?.readyState !== WebSocket.OPEN) return
 
-    ws.send(
-      JSON.stringify({
-        type: 'room-update',
-        source: currentUserRef.current?.source ?? '',
-        userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
-        sessionid: sessionuidRef.current ?? '',
-        roomId: effectiveRoomId,
-        roomid: effectiveRoomId,
-        timestamp: getTimeStamp()
-      })
-    )
+    sendOverlayWs(ws, {
+      type: 'room-update',
+      source: currentUserRef.current?.source ?? '',
+      userid: currentUserRef.current?.userid ?? currentUserRef.current?.id ?? '',
+      sessionid: sessionuidRef.current ?? '',
+      roomId: effectiveRoomId,
+      roomid: effectiveRoomId,
+      timestamp: getTimeStamp()
+    }, readTicketContext(dataInfoItemsRef.current, pendingInitFieldsRef.current))
   }, [effectiveRoomId, wsRef])
 
   useEffect(() => {
@@ -1629,18 +1648,16 @@ export default function App() {
     const unsubBuffer = overlay.getRecallBuffer((data: unknown) => {
       const ws = (wsRef as React.MutableRefObject<WebSocket | null>).current
       if (ws?.readyState !== WebSocket.OPEN) return
-      ws.send(
-        JSON.stringify({
-          type: 'recall-buffer',
-          source: (currentUserRef.current as { source?: string })?.source ?? '',
-          userid:
-            (currentUserRef.current as { userid?: string; id?: string })?.userid ??
-            (currentUserRef.current as { id?: string })?.id,
-          sessionid: sessionuidRef.current,
-          data,
-          timestamp: getTimeStamp()
-        })
-      )
+      sendOverlayWs(ws, {
+        type: 'recall-buffer',
+        source: (currentUserRef.current as { source?: string })?.source ?? '',
+        userid:
+          (currentUserRef.current as { userid?: string; id?: string })?.userid ??
+          (currentUserRef.current as { id?: string })?.id,
+        sessionid: sessionuidRef.current,
+        data,
+        timestamp: getTimeStamp()
+      }, readTicketContext(dataInfoItemsRef.current, pendingInitFieldsRef.current))
     })
 
     return () => {
@@ -2051,6 +2068,7 @@ export default function App() {
               userid={userid}
               sessionid={sessionid}
               source={source}
+              getTicketContext={getTicketContext}
               onCopy={copyToClipboard}
             />
           )}

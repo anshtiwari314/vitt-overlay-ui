@@ -71,9 +71,11 @@ async function runListenerScrape(tabId, listener, url, trigger, priceMeta = null
     );
 
     capture.source = job.source;
+    const itineraryId = listener.extractItineraryId(url);
+    capture.itineraryId = itineraryId;
     capture.listenerMeta = {
       trigger,
-      itineraryId: listener.extractItineraryId(url),
+      itineraryId,
       price: priceMeta?.price || null,
       slashedPrice: priceMeta?.slashedPrice || null
     };
@@ -85,6 +87,7 @@ async function runListenerScrape(tabId, listener, url, trigger, priceMeta = null
       source: job.source,
       url,
       extractedUrl: capture.extractedUrl || url,
+      itineraryId,
       capture
     });
 
