@@ -11,7 +11,7 @@ import { waitForMmtPackageReady } from './wait-for-mmt-package-ready.js';
  * } | null} */
 let api = null;
 
-/** @type {Map<number, { listenerId: string, itineraryId: string | null, scraping: boolean, watcherInjected: boolean }>} */
+/** @type {Map<number, { listenerId: string, itineraryId: string | null, scraping: boolean, watcherInjected: boolean, generation: number }>} */
 const monitoredTabs = new Map();
 
 /** @type {Map<number, ReturnType<typeof setTimeout>>} */
@@ -23,6 +23,30 @@ export function initListenerController(deps) {
 
 export function isMonitoredListenerTab(tabId) {
   return monitoredTabs.has(tabId);
+}
+
+function clearPriceDebounce(tabId) {
+  const timer = priceDebounceTimers.get(tabId);
+  if (timer) {
+    clearTimeout(timer);
+    priceDebounceTimers.delete(tabId);
+  }
+}
+
+function rearmMonitoredTab(tabId, listener, itineraryId) {
+  const existing = monitoredTabs.get(tabId);
+  const generation = (existing?.generation ?? 0) + 1;
+
+  monitoredTabs.set(tabId, {
+    listenerId: listener.id,
+    itineraryId,
+    scraping: false,
+    watcherInjected: false,
+    generation
+  });
+
+  clearPriceDebounce(tabId);
+  return generation;
 }
 
 async function injectPriceWatcher(tabId, listener) {
@@ -45,13 +69,15 @@ async function injectPriceWatcher(tabId, listener) {
   }
 }
 
-async function runListenerScrape(tabId, listener, url, trigger, priceMeta = null) {
+async function runListenerScrape(tabId, listener, url, trigger, priceMeta = null, expectedGeneration = null) {
   if (!api) return;
 
   const state = monitoredTabs.get(tabId);
   if (!state || state.scraping) return;
+  if (expectedGeneration != null && state.generation !== expectedGeneration) return;
 
   state.scraping = true;
+  const generation = state.generation;
   const job = listener.buildJob(url, { trigger });
 
   try {
@@ -113,14 +139,17 @@ async function runListenerScrape(tabId, listener, url, trigger, priceMeta = null
       error: error?.message || String(error)
     });
   } finally {
-    state.scraping = false;
+    const current = monitoredTabs.get(tabId);
+    if (current && current.generation === generation) {
+      current.scraping = false;
+    }
   }
 }
 
 function schedulePriceChangeScrape(tabId, listener, msg) {
   const debounceMs = listener.priceChangeDebounceMs ?? 3000;
-  const existing = priceDebounceTimers.get(tabId);
-  if (existing) clearTimeout(existing);
+  const expectedGeneration = monitoredTabs.get(tabId)?.generation ?? null;
+  clearPriceDebounce(tabId);
 
   priceDebounceTimers.set(
     tabId,
@@ -128,10 +157,12 @@ function schedulePriceChangeScrape(tabId, listener, msg) {
       priceDebounceTimers.delete(tabId);
       const url = msg.url;
       if (!url || !listener.matches(url)) return;
+      const state = monitoredTabs.get(tabId);
+      if (!state || state.generation !== expectedGeneration) return;
       void runListenerScrape(tabId, listener, url, 'price_change', {
         price: msg.price,
         slashedPrice: msg.slashedPrice
-      });
+      }, expectedGeneration);
     }, debounceMs)
   );
 }
@@ -151,20 +182,27 @@ export async function handleListenerTabUpdated(tabId, changeInfo, tab) {
     return;
   }
 
-  const isLoadComplete = changeInfo.status === 'complete';
-  const isUrlChange = Boolean(changeInfo.url);
-  if (!isLoadComplete && !isUrlChange) return;
-  if (monitoredTabs.has(tabId)) return;
+  if (changeInfo.status === 'loading') {
+    if (monitoredTabs.has(tabId)) {
+      monitoredTabs.get(tabId).watcherInjected = false;
+      clearPriceDebounce(tabId);
+    }
+    return;
+  }
+
+  if (changeInfo.status !== 'complete') return;
 
   const itineraryId = listener.extractItineraryId(url);
-  monitoredTabs.set(tabId, {
+  const isRearm = monitoredTabs.has(tabId);
+  const generation = rearmMonitoredTab(tabId, listener, itineraryId);
+
+  api.devLog(isRearm ? 'listener_tab_rearmed' : 'listener_tab_matched', {
+    tabId,
     listenerId: listener.id,
     itineraryId,
-    scraping: false,
-    watcherInjected: false
+    generation,
+    url: url.slice(0, 120)
   });
-
-  api.devLog('listener_tab_matched', { tabId, listenerId: listener.id, itineraryId, url: url.slice(0, 120) });
 
   const readyState = await waitForMmtPackageReady(
     tabId,
@@ -182,19 +220,16 @@ export async function handleListenerTabUpdated(tabId, changeInfo, tab) {
     waitedMs: readyState?.waitedMs
   });
 
-  if (!monitoredTabs.has(tabId)) return;
+  const state = monitoredTabs.get(tabId);
+  if (!state || state.generation !== generation) return;
 
-  await runListenerScrape(tabId, listener, url, 'initial');
+  await runListenerScrape(tabId, listener, url, 'initial', null, generation);
   await injectPriceWatcher(tabId, listener);
 }
 
 export function handleListenerTabRemoved(tabId) {
   monitoredTabs.delete(tabId);
-  const timer = priceDebounceTimers.get(tabId);
-  if (timer) {
-    clearTimeout(timer);
-    priceDebounceTimers.delete(tabId);
-  }
+  clearPriceDebounce(tabId);
 }
 
 export function handleListenerPriceChange(msg, sender) {

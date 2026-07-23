@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vitt Page Capture",
-  "version": "1.4.9",
+  "version": "1.5.0",
   "description": "Manual page capture to vitt-overlay-server plus automated scroll-and-extract via Vitt Overlay.",
   "permissions": ["tabs", "scripting", "storage", "alarms", "activeTab", "offscreen"],
   "host_permissions": [
