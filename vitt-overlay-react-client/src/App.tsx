@@ -23,6 +23,18 @@ import {
   getLidModelLabel,
   setLidModelId
 } from './functions/lidModels'
+import {
+  formatPipelineLidLine,
+  formatPipelineTranscriptionLine,
+  formatPipelineWhisperLine,
+  type PipelinePayload
+} from './functions/pipelineDisplay'
+import {
+  formatEnsembleMemberLine,
+  formatEnsembleVoteLine,
+  parseEnsembleMembers,
+  type EnsembleMember
+} from './functions/ensembleDisplay'
 import { addTranscription, clearTranscriptions } from './redux/reducers/TranscriptionReducer'
 import { addPrompt, clearPrompts } from './redux/reducers/promptsReducer'
 import { addConversationTurn, addIncomingMessages, addOutgoingMessage, clearChat } from './redux/reducers/chatWithAIReducer'
@@ -434,14 +446,54 @@ function TranscriptionItem({
     audioDurationMs?: number
     language?: string
     confidence?: number
+    pipeline?: PipelinePayload
+    pipelineSummary?: string
+    ensembleMembers?: EnsembleMember[]
+    receivedAt?: string
+    serverTimestamp?: string
   }
   highlighted?: boolean
 }) {
   const meta = formatTranscriptMeta(e)
+  const pipeline = e.pipeline
+  const ensembleMembers = e.ensembleMembers
+  const lidLine = pipeline ? formatPipelineLidLine(pipeline) : ''
+  const whisperLine = pipeline ? formatPipelineWhisperLine(pipeline) : ''
+  const transcriptionLine = formatPipelineTranscriptionLine(e.transcription)
 
   return (
     <div className={`transcription-card${highlighted ? ' highlight-new' : ''}`}>
-      <div className="transcription-text">{e.transcription}</div>
+      {ensembleMembers?.length ? (
+        <div className="ensemble-breakdown">
+          <div className="ensemble-member-line ensemble-vote-line">
+            <span className="ensemble-model-label">Ensemble vote</span>
+            {' : '}
+            {formatEnsembleVoteLine(e.language, e.confidence, e.lidLatencyMs)}
+          </div>
+          {ensembleMembers.map((member, index) => (
+            <div className="ensemble-member-line" key={member.modelId ?? index}>
+              {formatEnsembleMemberLine(member)}
+            </div>
+          ))}
+        </div>
+      ) : pipeline ? (
+        <div className="pipeline-breakdown">
+          <div className="pipeline-line">
+            <span className="pipeline-label">LID:</span> {lidLine || '—'}
+          </div>
+          <div className="pipeline-line">
+            <span className="pipeline-label">Whisper:</span> {whisperLine || '—'}
+          </div>
+          <div className="pipeline-line pipeline-transcription-line">
+            <span className="pipeline-label">Transcription:</span> {transcriptionLine}
+          </div>
+        </div>
+      ) : (
+        <div className="transcription-text">{e.transcription}</div>
+      )}
+      {e.receivedAt ? (
+        <div className="transcription-received-at">Received {e.receivedAt}</div>
+      ) : null}
       {meta ? <div className="transcription-meta">{meta}</div> : null}
     </div>
   )
@@ -1499,6 +1551,12 @@ export default function App() {
               })
             }
 
+            const receivedAt = getTimeStamp()
+            const serverTimestamp = (result.timestamp as string | undefined) ?? undefined
+            const ensembleMembers = parseEnsembleMembers(
+              result.ensembleMembers ?? result.ensemble_members
+            )
+
             d(
               addTranscription({
                 text: text ?? '',
@@ -1510,7 +1568,10 @@ export default function App() {
                   lidModelLabelRaw ??
                   (lidModel ? getLidModelLabel(lidModel) : undefined),
                 lidLatencyMs: Number.isFinite(lidLatencyMs) ? lidLatencyMs : undefined,
-                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined,
+                ensembleMembers,
+                receivedAt,
+                serverTimestamp
               })
             )
           }
@@ -1520,6 +1581,18 @@ export default function App() {
             const speaker = result.speaker as string | undefined
             const asrModel = (result.asrModel ?? result.asr_model) as string | undefined
             const asrModelLabelRaw = (result.asrModelLabel ?? result.asr_model_label) as string | undefined
+            const lidModel = (result.lidModel ?? result.lid_model) as string | undefined
+            const lidModelLabelRaw = (result.lidModelLabel ?? result.lid_model_label) as string | undefined
+            const language = (result.language ?? result.languageCode ?? result.language_code) as string | undefined
+            const confidenceRaw = result.confidence
+            const confidence =
+              typeof confidenceRaw === 'number'
+                ? confidenceRaw
+                : typeof confidenceRaw === 'string'
+                  ? Number(confidenceRaw)
+                  : undefined
+            const pipeline = (result.pipeline ?? undefined) as PipelinePayload | undefined
+            const pipelineSummary = (result.pipelineSummary ?? result.pipeline_summary) as string | undefined
             const asrLatencyRaw = result.asrLatencyMs ?? result.asr_latency_ms
             const audioDurationRaw = result.audioDurationMs ?? result.audio_duration_ms
             const asrLatencyMs =
@@ -1535,6 +1608,9 @@ export default function App() {
                   ? Number(audioDurationRaw)
                   : undefined
 
+            const receivedAt = getTimeStamp()
+            const serverTimestamp = (result.timestamp as string | undefined) ?? undefined
+
             d(
               addTranscription({
                 text: text ?? '',
@@ -1543,8 +1619,18 @@ export default function App() {
                 asrModelLabel:
                   asrModelLabelRaw ??
                   (asrModel ? getAsrModelLabel(asrModel) : undefined),
+                lidModel,
+                lidModelLabel:
+                  lidModelLabelRaw ??
+                  (lidModel ? getLidModelLabel(lidModel) : undefined),
+                language,
+                confidence: Number.isFinite(confidence) ? confidence : undefined,
+                pipeline,
+                pipelineSummary,
                 asrLatencyMs: Number.isFinite(asrLatencyMs) ? asrLatencyMs : undefined,
-                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined
+                audioDurationMs: Number.isFinite(audioDurationMs) ? audioDurationMs : undefined,
+                receivedAt,
+                serverTimestamp
               })
             )
           }

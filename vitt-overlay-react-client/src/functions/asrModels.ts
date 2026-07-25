@@ -19,6 +19,18 @@ export const ASR_MODELS: AsrModelOption[] = [
     description: 'Better accuracy than base; slower.'
   },
   {
+    id: 'whisper-meta-mms-pipeline',
+    label: 'Whisper + Meta MMS-LID Pipeline',
+    description:
+      'MMS-LID top-3 → forced Whisper Small × 3 → best-scoring transcript. Reduces wrong-language hallucinations.'
+  },
+  {
+    id: 'whisper-whisper-lid-pipeline',
+    label: 'Whisper + Whisper LID Pipeline',
+    description:
+      'Whisper internal LID top-3 → forced Whisper Small × 3 → best-scoring transcript.'
+  },
+  {
     id: 'faster-whisper-medium',
     label: 'Whisper Medium',
     description: 'Higher accuracy than small; slowest on CPU.'
@@ -69,6 +81,41 @@ export const ASR_MODELS: AsrModelOption[] = [
     description: 'Kannada transcription (model code kn).'
   },
   {
+    id: 'indic-conformer-gu',
+    label: 'IndicConformer — Gujarati',
+    description: 'Gujarati transcription (model code gu).'
+  },
+  {
+    id: 'indic-conformer-bn',
+    label: 'IndicConformer — Bengali',
+    description: 'Bengali transcription (model code bn).'
+  },
+  {
+    id: 'indic-conformer-ml',
+    label: 'IndicConformer — Malayalam',
+    description: 'Malayalam transcription (model code ml).'
+  },
+  {
+    id: 'indic-conformer-ne',
+    label: 'IndicConformer — Nepali',
+    description: 'Nepali transcription (model code ne).'
+  },
+  {
+    id: 'indic-conformer-or',
+    label: 'IndicConformer — Odia',
+    description: 'Odia transcription (model code or).'
+  },
+  {
+    id: 'indic-conformer-ta',
+    label: 'IndicConformer — Tamil',
+    description: 'Tamil transcription (model code ta).'
+  },
+  {
+    id: 'indic-conformer-te',
+    label: 'IndicConformer — Telugu',
+    description: 'Telugu transcription (model code te).'
+  },
+  {
     id: 'indic-conformer',
     label: 'IndicConformer (Hindi)',
     description: 'Legacy alias — Hindi. Indian languages only; use Whisper for English.'
@@ -97,6 +144,76 @@ export const ASR_MODELS: AsrModelOption[] = [
     id: 'hinglish-srota',
     label: 'Hinglish — Srota (Qwen3)',
     description: 'Mixed-script Hinglish (Qwen3-ASR fine-tune).'
+  },
+  {
+    id: 'funasr-sensevoice-hi',
+    label: 'FunASR SenseVoice-Small — Hindi',
+    description: 'SenseVoice auto LID. Hindi experimental (zh/en/ja/ko/yue trained). FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-sensevoice-en',
+    label: 'FunASR SenseVoice-Small — English',
+    description: 'SenseVoice English with internal LID. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-nano-hi',
+    label: 'Fun-ASR-Nano — Hindi',
+    description: 'Fun-ASR-MLT-Nano Hindi hint + internal LID. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-nano-en',
+    label: 'Fun-ASR-Nano — English',
+    description: 'Fun-ASR-MLT-Nano English hint + internal LID. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-qwen3-hi',
+    label: 'Qwen3-ASR — Hindi',
+    description: 'Qwen3-ASR-1.7B Hindi + internal LID. Slow on CPU. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-qwen3-en',
+    label: 'Qwen3-ASR — English',
+    description: 'Qwen3-ASR-1.7B English + internal LID. Slow on CPU. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-glm-hi',
+    label: 'GLM-ASR-Nano — Hindi',
+    description: 'GLM-ASR-Nano auto LID (17 langs). FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-glm-en',
+    label: 'GLM-ASR-Nano — English',
+    description: 'GLM-ASR-Nano auto LID (17 langs). FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-paraformer-en-hi',
+    label: 'Paraformer-en — Hindi',
+    description: 'Paraformer-en auto LID. Hindi experimental. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-paraformer-en-en',
+    label: 'Paraformer-en — English',
+    description: 'Paraformer English ASR. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-paraformer-zh-streaming-hi',
+    label: 'Paraformer-zh-streaming — Hindi',
+    description: 'Streaming Paraformer (zh hint for Hindi — experimental). FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-paraformer-zh-streaming-en',
+    label: 'Paraformer-zh-streaming — English',
+    description: 'Streaming Paraformer English path. FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-uniasr-hi',
+    label: 'UniASR — Hindi (Urdu proxy)',
+    description: 'UniASR Urdu as Indo-Aryan proxy (no Hindi checkpoint). FunASR FSMN-VAD.'
+  },
+  {
+    id: 'funasr-uniasr-en',
+    label: 'UniASR — English',
+    description: 'UniASR English 2-pass model. FunASR FSMN-VAD.'
   }
 ]
 

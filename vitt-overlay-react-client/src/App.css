@@ -376,6 +376,67 @@
   color: var(--accent);
 }
 
+.pipeline-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.pipeline-line {
+  word-break: break-word;
+}
+
+.pipeline-label {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.pipeline-transcription-line {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-glass);
+}
+
+.ensemble-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.ensemble-member-line {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-main);
+  word-break: break-word;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+}
+
+.ensemble-vote-line {
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border-glass);
+}
+
+.ensemble-model-label {
+  color: var(--accent);
+}
+
+.transcription-received-at {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
 .asr-timing-bar {
   flex-shrink: 0;
   display: flex;

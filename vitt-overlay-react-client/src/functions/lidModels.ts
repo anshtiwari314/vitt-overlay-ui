@@ -57,6 +57,29 @@ export const LID_MODELS: LidModelOption[] = [
     id: 'nemo-langid-matchboxnet',
     label: 'NeMo MatchboxNet LangID',
     description: 'NeMo EncDecSpeakerLabelModel LangID checkpoint.'
+  },
+  {
+    id: 'whisper-internal-lid',
+    label: 'Whisper Internal LID',
+    description: 'Whisper Small encoder language detection (faster-whisper).'
+  },
+  {
+    id: 'fastconformer-lid',
+    label: 'FastConformer LID (NeMo + linear probe)',
+    description:
+      'NeMo FastConformer encoder + linear head on FLEURS Indic langs (13 languages). First warmup trains head if missing.'
+  },
+  {
+    id: 'ensemble-lid-five',
+    label: 'Ensemble LID (6): ECAPA + MMS + IndicSUPERB + LoRA + NeMo + Whisper',
+    description:
+      'Six models: SpeechBrain ECAPA, Meta MMS, IndicSUPERB, Code-Switched LoRA, NeMo AmberNet, Whisper internal LID.'
+  },
+  {
+    id: 'ensemble-lid-four',
+    label: 'Ensemble LID (4): ECAPA + IndicSUPERB + NeMo + Whisper',
+    description:
+      'Four models: SpeechBrain ECAPA, IndicSUPERB, NeMo AmberNet, Whisper internal LID (no Meta MMS, no Code-Switched LoRA).'
   }
 ]
 

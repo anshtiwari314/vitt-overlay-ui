@@ -1,4 +1,27 @@
 import { createSlice } from "@reduxjs/toolkit";
+import type { PipelinePayload } from '../functions/pipelineDisplay'
+import type { EnsembleMember } from '../functions/ensembleDisplay'
+
+type TranscriptionEntry = {
+  transcription: string
+  speaker?: string
+  asrModel?: string
+  asrModelLabel?: string
+  asrLatencyMs?: number
+  lidModel?: string
+  lidModelLabel?: string
+  lidLatencyMs?: number
+  audioDurationMs?: number
+  language?: string
+  confidence?: number
+  pipeline?: PipelinePayload
+  pipelineSummary?: string
+  ensembleMembers?: EnsembleMember[]
+  /** Client-side time when the WebSocket message was handled. */
+  receivedAt?: string
+  /** Server ISO timestamp from the payload, when present. */
+  serverTimestamp?: string
+}
 
 let initialLoadState = [
   {
@@ -305,11 +328,11 @@ let initialLoadState = [
 
 let transcriptionSlice = createSlice({
     name:'transcriptionSlice',
-    initialState:{transcriptions:[]},
+    initialState:{transcriptions:[] as TranscriptionEntry[]},
     reducers:{
         addTranscription:(state,action)=>{
             const p = action.payload
-            let tempObj = {
+            let tempObj: TranscriptionEntry = {
               transcription: p.text,
               speaker: p.speaker,
               asrModel: p.asrModel ?? p.asr_model,
@@ -321,6 +344,11 @@ let transcriptionSlice = createSlice({
               audioDurationMs: p.audioDurationMs ?? p.audio_duration_ms,
               language: p.language,
               confidence: p.confidence,
+              pipeline: p.pipeline,
+              pipelineSummary: p.pipelineSummary ?? p.pipeline_summary,
+              ensembleMembers: p.ensembleMembers ?? p.ensemble_members,
+              receivedAt: p.receivedAt ?? p.received_at,
+              serverTimestamp: p.serverTimestamp ?? p.server_timestamp ?? p.timestamp,
             }
             state.transcriptions = [tempObj,...state.transcriptions]
             return state;
