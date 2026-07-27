@@ -901,7 +901,8 @@ function MergedAiAssistTab({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={sending}
+            readOnly={sending}
+            aria-busy={sending}
             rows={2}
           />
         </div>
@@ -1931,6 +1932,7 @@ export default function App() {
             <span className="dot" />
             <span>Vitt Overlay</span>
           </div>
+          <div className="app4-header-drag drag-region" aria-hidden="true" />
           <div className="app4-actions no-drag">
             <button type="button" className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
               {theme === 'dark' ? <SunMedium size={18} /> : <SunMoon size={18} />}
@@ -2006,7 +2008,7 @@ export default function App() {
           return null
         })()}
 
-        <div className="connection-status-bar no-drag">
+        <div className="connection-status-bar">
           <ConnectionStatusIcon
             connected={extensionConnected}
             label={extensionConnected ? 'Browser Connected' : 'Browser Disconnected'}
@@ -2022,7 +2024,7 @@ export default function App() {
         <div className="status-section" />
 
         {selectedTab !== 'settings' && (
-          <div className="controls-section no-drag">
+          <div className="controls-section">
             {sdkState.permissions_granted ? (
               <>
                 <button
@@ -2060,7 +2062,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="list-container no-drag" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        <div className="list-container" style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           {selectedTab === 'transcript' && <TranscriptionList />}
           {selectedTab === 'uploads' && <UploadsTab sdkState={sdkState} />}
           {selectedTab === 'ai_assist' && (

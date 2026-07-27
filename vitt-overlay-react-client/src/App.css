@@ -60,6 +60,77 @@
   pointer-events: auto;
 }
 
+/* Drag panes: empty space within these regions moves the overlay window. */
+.overlay-drag-pane,
+.content-list,
+.chat-messages,
+.connection-status-bar,
+.controls-section,
+.status-section:not(.no-drag),
+.login3-shell,
+.login3-hero,
+.login3-form {
+  -webkit-app-region: drag;
+}
+
+.list-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Interactive / content blocks opt out of drag. */
+.card.app4-card .no-drag,
+.card.app4-card .no-drag *,
+.card.app4-card button,
+.card.app4-card input,
+.card.app4-card textarea,
+.card.app4-card select,
+.card.app4-card a,
+.card.app4-card label,
+.connection-status-icon,
+.connection-status-icon *,
+.list-container .transcription-card,
+.list-container .chat-message-out,
+.list-container .chat-message-in,
+.list-container .chat-loading,
+.list-container .prompt-empty,
+.list-container .prompt-empty *,
+.list-container .data-info-card,
+.list-container .data-info-empty,
+.list-container .data-info-field-row,
+.list-container .settings-tab,
+.list-container .settings-tab *,
+.list-container .chat-input-wrap,
+.list-container .chat-input-wrap *,
+.list-container .new-messages-indicator,
+.login3-chip,
+.login3-title,
+.login3-subtitle,
+.login3-float-field,
+.login3-float-field *,
+.login3-error,
+.login3-submit,
+.login3-section,
+.login3-section *,
+.meeting-card-close,
+.meeting-card-close *,
+.copy-btn,
+.copy-btn *,
+.meeting-list-item,
+.meeting-list-item *,
+.link-btn,
+.link-btn *,
+.tab-bar,
+.tab-bar *,
+.prompt-actions,
+.prompt-actions *,
+.app4-actions,
+.app4-actions * {
+  -webkit-app-region: no-drag;
+}
+
 .card.app4-card > * {
   position: relative;
   z-index: 1;
@@ -80,9 +151,7 @@
   box-shadow: 0 0 0 1px rgba(0,0,0,1);
 }
 
-.content-list,
 .content-list *,
-.chat-messages,
 .chat-messages *,
 .transcription-card,
 .transcription-card *,
@@ -106,12 +175,19 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: var(--space-3);
   padding-bottom: var(--space-2);
   border-bottom: 1px solid transparent;
   -webkit-app-region: drag;
   position: relative;
+}
+
+.app4-header-drag {
+  flex: 1;
+  align-self: stretch;
+  min-width: 12px;
+  -webkit-app-region: drag;
 }
 
 .app4-title {
@@ -135,27 +211,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-}
-
-.app4-actions,
-.app4-actions *,
-.prompt-actions,
-.prompt-actions *,
-.tab-bar,
-.tab-bar *,
-.controls-section,
-.controls-section *,
-.list-container,
-.list-container *,
-.meeting-card-close,
-.meeting-card-close *,
-.copy-btn,
-.copy-btn *,
-.meeting-list-item,
-.meeting-list-item *,
-.link-btn,
-.link-btn * {
-  -webkit-app-region: no-drag;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .btn-icon {
@@ -381,6 +438,8 @@
   align-items: center;
   gap: 10px;
   padding: 0 12px 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .connection-status-icon {
@@ -855,6 +914,10 @@
 
 .chat-textarea::placeholder { color: var(--text-muted); }
 .chat-textarea:focus { border-color: var(--accent); }
+
+.chat-textarea[aria-busy="true"] {
+  opacity: 0.85;
+}
 
 .chat-send-btn {
   flex-shrink: 0;
@@ -1412,6 +1475,8 @@
 
 .login3-section {
   padding: 12px;
+  cursor: default;
+  -webkit-app-region: no-drag;
 }
 
 .login3-status-row {

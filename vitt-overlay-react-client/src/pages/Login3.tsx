@@ -228,10 +228,11 @@ export default function Login3() {
         style={{ ['--bg-opacity' as string]: transparency / 100 }}
       >
         <div className="app4-header">
-          <div className="app4-title drag-region">
+          <div className="app4-title no-drag">
             <span className="dot" />
             <span>Vitt Overlay</span>
           </div>
+          <div className="app4-header-drag drag-region" aria-hidden="true" />
           <div className="app4-actions no-drag">
             <button type="button" className="btn-icon" onClick={minimizeApp} onMouseDown={(e) => e.stopPropagation()} title="Minimize">
               <Minus size={18} />
@@ -243,7 +244,7 @@ export default function Login3() {
           </div>
         </div>
 
-        <div className="login3-shell no-drag">
+        <div className="login3-shell">
           <div className="login3-hero">
             <div className="login3-chip">
               <Sparkles size={12} />
