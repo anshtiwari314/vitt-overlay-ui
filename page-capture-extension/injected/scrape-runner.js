@@ -603,6 +603,8 @@
           continue;
         }
         if (devLog) devLog.events.push({ type: 'title_matched', round: roundNum, name, searchPackageName: opts.searchPackageName });
+        if (devLog) devLog.events.push({ type: 'post_match_hydration_wait', round: roundNum, waitMs: 3000 });
+        await sleep(3000);
       }
 
       await closeModals();
