@@ -48,8 +48,13 @@ contextMenu({
   showServices: false
 });
 
-let win;
+const POPUP_SETTINGS_URL = 'chrome://settings/content/popups';
+
+async function openPopupSettingsInChrome() {
+  return launchChromeWithExtension({ url: POPUP_SETTINGS_URL });
+}
 let tray;
+let win;
 let isClickThrough = false;
 
 /** Active detected meetings. Source of truth for renderer UI. */
@@ -81,6 +86,39 @@ function registerIpcHandlers() {
       return;
     }
     applyMousePassthrough(Boolean(ignore));
+  });
+
+  let windowDragState = null;
+
+  ipcMain.on('overlay-window-drag-start', () => {
+    if (!win) return;
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = win.getBounds();
+    windowDragState = {
+      startScreenX: cursor.x,
+      startScreenY: cursor.y,
+      startX: bounds.x,
+      startY: bounds.y,
+      width: bounds.width,
+      height: bounds.height
+    };
+  });
+
+  ipcMain.on('overlay-window-drag-move', () => {
+    if (!win || !windowDragState) return;
+    const cursor = screen.getCursorScreenPoint();
+    const dx = cursor.x - windowDragState.startScreenX;
+    const dy = cursor.y - windowDragState.startScreenY;
+    win.setBounds({
+      x: Math.round(windowDragState.startX + dx),
+      y: Math.round(windowDragState.startY + dy),
+      width: windowDragState.width,
+      height: windowDragState.height
+    });
+  });
+
+  ipcMain.on('overlay-window-drag-stop', () => {
+    windowDragState = null;
   });
 
   ipcMain.on('open-external', (_event, url) => {
@@ -169,7 +207,20 @@ function registerIpcHandlers() {
     connected: getExtensionConnected()
   }));
 
-  ipcMain.handle('extension-send-command', (_event, payload) => {
+  ipcMain.handle('extension-send-command', async (_event, payload) => {
+    if (payload?.type === 'open_popup_settings') {
+      const sent = sendExtensionCommand(payload);
+      if (!sent.ok) {
+        try {
+          await openPopupSettingsInChrome();
+          return { ok: true, via: 'electron_direct' };
+        } catch (e) {
+          console.error('open_popup_settings (electron direct)', e);
+          return { ok: false, error: e.message || String(e) };
+        }
+      }
+      return sent;
+    }
     return sendExtensionCommand(payload);
   });
 
@@ -468,6 +519,11 @@ app.whenReady().then(() => {
       console.log(`[scrape] extension → electron: ${payload.status} ${payload.jobId} — ${payload.message || ''}`);
     } else if (payload.type === 'scrape_error') {
       console.log(`[scrape] extension → electron: error ${payload.jobId} ${payload.error}`);
+    } else if (payload.type === 'open_popup_settings_result' && payload.needsElectronFallback) {
+      console.log('[extension] open_popup_settings failed in extension, falling back to Chrome launch');
+      void openPopupSettingsInChrome().catch((e) => {
+        console.error('openPopupSettingsInChrome fallback', e);
+      });
     }
     sendScrapeBridgeEvent(payload);
   });
