@@ -203,6 +203,13 @@ function shouldCloseDetailTabAfterScrape(job) {
   return true;
 }
 
+/** Type 1/3/5 listing homepage: close after scrape unless job sets closeHomePageAfterScrape: false. */
+function shouldCloseHomePageAfterScrape(job) {
+  const value = job?.closeHomePageAfterScrape;
+  if (value === false || value === 'false' || value === 0 || value === '0') return false;
+  return true;
+}
+
 function deliverInterceptResult(openerTabId, url, reason) {
   devLog('intercept_result', {
     openerTabId,
@@ -816,12 +823,18 @@ async function runMultiTabListingScrape(job, jobDevLog, onProgress) {
       catalog = [];
     }
   } finally {
-    if (discoverTabId != null) {
+    if (discoverTabId != null && shouldCloseHomePageAfterScrape(job)) {
       try {
         await chrome.tabs.remove(discoverTabId);
       } catch {
         /* ignore */
       }
+    } else if (discoverTabId != null) {
+      jobDevLog.events.push({
+        type: 'homepage_kept_open',
+        tabId: discoverTabId,
+        reason: 'closeHomePageAfterScrape_false'
+      });
     }
   }
 
@@ -1513,13 +1526,17 @@ async function runScrapeJob(job) {
       });
       note('listing_result_sent', { ok: true });
 
-      try {
-        note('listing_tab_closing', { tabId, reason: 'type5_listing_done_opening_package_detail' });
-        await chrome.tabs.remove(tabId);
-        tabId = null;
-      } catch (e) {
-        note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
+      if (shouldCloseHomePageAfterScrape(job)) {
+        try {
+          note('listing_tab_closing', { tabId, reason: 'type5_listing_done_opening_package_detail' });
+          await chrome.tabs.remove(tabId);
+        } catch (e) {
+          note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
+        }
+      } else {
+        note('homepage_kept_open', { tabId, reason: 'closeHomePageAfterScrape_false' });
       }
+      tabId = null;
 
       await streamPackageDetailsFromListing(
         job,
@@ -1563,13 +1580,17 @@ async function runScrapeJob(job) {
       // Type 3: listing is internal only (find URLs) — do not send listing scrape_result to backend.
       note('listing_result_skipped', { reason: 'type3_detail_only' });
 
-      try {
-        note('listing_tab_closing', { tabId, reason: 'type3_listing_done' });
-        await chrome.tabs.remove(tabId);
-        tabId = null;
-      } catch (e) {
-        note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
+      if (shouldCloseHomePageAfterScrape(job)) {
+        try {
+          note('listing_tab_closing', { tabId, reason: 'type3_listing_done' });
+          await chrome.tabs.remove(tabId);
+        } catch (e) {
+          note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
+        }
+      } else {
+        note('homepage_kept_open', { tabId, reason: 'closeHomePageAfterScrape_false' });
       }
+      tabId = null;
 
       if (job.extractPackageDetail === true) {
         note('type4_chain_start', {
@@ -1633,8 +1654,21 @@ async function runScrapeJob(job) {
   } finally {
 
     if (tabId != null) {
-      const isPackageDetailJob = buildScrapeOpts(job).scrapeMode === 'mmt-package';
-      const shouldClose = !isPackageDetailJob || shouldCloseDetailTabAfterScrape(job);
+      const scrapeMode = buildScrapeOpts(job).scrapeMode;
+      const isPackageDetailJob = scrapeMode === 'mmt-package';
+      const isListingHomepageJob =
+        scrapeMode === 'mmt-listing' ||
+        scrapeMode === 'mmt-listing-search' ||
+        scrapeMode === 'mmt-listing-first-package';
+
+      let shouldClose;
+      if (isPackageDetailJob) {
+        shouldClose = shouldCloseDetailTabAfterScrape(job);
+      } else if (isListingHomepageJob) {
+        shouldClose = shouldCloseHomePageAfterScrape(job);
+      } else {
+        shouldClose = true;
+      }
 
       if (shouldClose) {
         try {
@@ -1648,7 +1682,10 @@ async function runScrapeJob(job) {
           note('listing_tab_close_failed', { tabId, error: e?.message || String(e) });
         }
       } else {
-        note('detail_tab_kept_open', { tabId, reason: 'closeDetailTabAfterScrape_false' });
+        note('homepage_kept_open', {
+          tabId,
+          reason: 'closeHomePageAfterScrape_false'
+        });
       }
     }
 

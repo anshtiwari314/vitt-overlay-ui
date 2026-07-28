@@ -66,6 +66,7 @@ const TYPE1_LISTING_ONLY = {
   scrollUntilStable: true,
   waitMs: Number(process.env.VITT_TYPE1_WAIT_MS || 4000),
   extractAllListingTabs: envBool('VITT_TYPE1_EXTRACT_ALL_LISTING_TABS', true),
+  closeHomePageAfterScrape: envBool('VITT_TYPE1_CLOSE_HOME_PAGE_AFTER_SCRAPE', true),
   listingTabName: 'All Packages'
 };
 
@@ -84,8 +85,8 @@ const TYPE3_LISTING_SEARCH = {
   scrapeMode: 'mmt-listing-search',
   url: TYPE3_LISTING_URL,
   searchPackageName: process.env.VITT_TYPE3_SEARCH_PACKAGE_NAME || 'sabarimala SAcred  jOurney',
-  extractWithFlight: false,
-  extractWithoutFlight: false,
+  extractWithFlight: true,
+  extractWithoutFlight: true,
   scrollUntilStable: true,
   waitMs: 3000,
   extractPackageDetail: envBool('VITT_TYPE3_EXTRACT_PACKAGE_DETAIL', true),
@@ -97,7 +98,8 @@ const TYPE3_LISTING_SEARCH = {
   extractTransfers: false,
   maxSidebarClicks: 8,
   packageDetailWaitMs: 2500,
-  closeDetailTabAfterScrape: false
+  closeDetailTabAfterScrape: false,
+  closeHomePageAfterScrape: envBool('VITT_TYPE3_CLOSE_HOME_PAGE_AFTER_SCRAPE', true)
 };
 
 /** Type 4 — package detail page (full content scrape). */
@@ -134,7 +136,8 @@ const TYPE5_FIRST_PACKAGE = {
   extractTransfers: false,
   maxSidebarClicks: 8,
   packageDetailWaitMs: 2500,
-  closeDetailTabAfterScrape: false
+  closeDetailTabAfterScrape: false,
+  closeHomePageAfterScrape: envBool('VITT_TYPE5_CLOSE_HOME_PAGE_AFTER_SCRAPE', true)
 };
 
 const SCRAPE_START_DELAY_MS = Number(process.env.VITT_SCRAPE_START_DELAY_MS || 5000);
