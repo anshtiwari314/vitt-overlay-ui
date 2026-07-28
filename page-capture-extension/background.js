@@ -207,6 +207,73 @@ function settleIntercept(openerTabId, url, reason) {
   return true;
 }
 
+function getActivePendingOpenerTabId() {
+  let latestOpener = null;
+  let latestArmedAt = 0;
+  for (const [openerTabId, interceptor] of pendingInterceptors) {
+    if (interceptor.settled) continue;
+    const armedAt = interceptor.armedAt || 0;
+    if (armedAt >= latestArmedAt) {
+      latestArmedAt = armedAt;
+      latestOpener = openerTabId;
+    }
+  }
+  return latestOpener;
+}
+
+function handleInterceptDetailTab(openerId, tab, reasonPrefix = 'intercept') {
+  markExtensionOpenedTab(tab.id);
+  const interceptor = pendingInterceptors.get(openerId);
+  if (!interceptor || interceptor.settled) return false;
+
+  devLog(`${reasonPrefix}_tab_created`, {
+    openerTabId: openerId,
+    detailTabId: tab.id,
+    pendingUrl: tab.pendingUrl || tab.url || null,
+    hasOpenerTabId: Boolean(tab.openerTabId)
+  });
+
+  interceptor.settled = true;
+  pendingInterceptors.delete(openerId);
+  clearTimeout(interceptor.timeout);
+
+  const finish = (url, reason) => {
+    devLog('intercept_detail_tab_close', {
+      openerTabId: openerId,
+      detailTabId: tab.id,
+      reason,
+      success: Boolean(url),
+      url: url ? url.slice(0, 120) : null
+    });
+    deliverInterceptResult(openerId, url, url ? 'ok' : reason || 'empty');
+    chrome.tabs.remove(tab.id).catch(() => {});
+  };
+
+  const u = tab.pendingUrl || tab.url;
+  if (u && u !== 'about:blank' && !u.startsWith('chrome://')) {
+    finish(u, 'immediate-url');
+    return true;
+  }
+
+  devLog('intercept_waiting_for_url', { detailTabId: tab.id, openerTabId: openerId });
+  const listener = (tabId, info, updatedTab) => {
+    if (tabId === tab.id) {
+      const url = info.url || updatedTab.url || updatedTab.pendingUrl;
+      if (url && url !== 'about:blank' && !url.startsWith('chrome://')) {
+        chrome.tabs.onUpdated.removeListener(listener);
+        finish(url, 'tab-updated');
+      }
+    }
+  };
+  chrome.tabs.onUpdated.addListener(listener);
+  setTimeout(() => {
+    chrome.tabs.onUpdated.removeListener(listener);
+    devLog('intercept_tab_update_timeout', { detailTabId: tab.id, openerTabId: openerId });
+    finish(null, 'tab-update-timeout');
+  }, 3000);
+  return true;
+}
+
 function devLog(tag, detail = {}) {
   console.log('[vitt-dev]', tag, JSON.stringify({ ts: new Date().toISOString(), ...detail }));
 }
@@ -251,6 +318,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       devLog('intercept_armed', { openerTabId: tabId, timeoutMs: msg.timeout || 3000 });
       pendingInterceptors.set(tabId, {
         settled: false,
+        armedAt: Date.now(),
         timeout: setTimeout(() => {
           if (pendingInterceptors.has(tabId)) {
             settleIntercept(tabId, null, 'timeout');
@@ -298,6 +366,24 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       devLog('intercept_same_tab_nav', { openerTabId: tabId, url: url.slice(0, 120) });
       settleIntercept(tabId, url, 'same-tab-nav');
     }
+    return;
+  }
+
+  if (pendingInterceptors.size > 0) {
+    const url = changeInfo.url || tab.url || tab.pendingUrl;
+    if (url && isPackageDetailUrl(url)) {
+      const openerTabId = getActivePendingOpenerTabId();
+      if (openerTabId && openerTabId !== tabId) {
+        devLog('intercept_orphan_tab_updated', {
+          openerTabId,
+          detailTabId: tabId,
+          url: url.slice(0, 120)
+        });
+        if (settleIntercept(openerTabId, url, 'orphan-tab-updated')) {
+          chrome.tabs.remove(tabId).catch(() => {});
+        }
+      }
+    }
   }
 });
 
@@ -309,53 +395,30 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.tabs.onCreated.addListener((tab) => {
   const openerId = tab.openerTabId;
   if (openerId && pendingInterceptors.has(openerId)) {
-    markExtensionOpenedTab(tab.id);
-    devLog('intercept_tab_created', {
-      openerTabId: openerId,
-      detailTabId: tab.id,
-      pendingUrl: tab.pendingUrl || tab.url || null,
-      hasOpenerTabId: Boolean(tab.openerTabId)
-    });
-    const interceptor = pendingInterceptors.get(openerId);
-    if (!interceptor || interceptor.settled) return;
-    interceptor.settled = true;
-    pendingInterceptors.delete(openerId);
-    clearTimeout(interceptor.timeout);
+    handleInterceptDetailTab(openerId, tab, 'intercept');
+    return;
+  }
 
-    const finish = (url, reason) => {
-      devLog('intercept_detail_tab_close', {
-        openerTabId: openerId,
+  if (pendingInterceptors.size > 0) {
+    const claimedOpenerId = getActivePendingOpenerTabId();
+    const pendingUrl = tab.pendingUrl || tab.url || '';
+    if (
+      claimedOpenerId &&
+      (!openerId || !pendingInterceptors.has(openerId)) &&
+      (isPackageDetailUrl(pendingUrl) || pendingUrl === '' || pendingUrl === 'about:blank')
+    ) {
+      devLog('intercept_orphan_tab_claim', {
+        claimedOpenerTabId: claimedOpenerId,
         detailTabId: tab.id,
-        reason,
-        success: Boolean(url),
-        url: url ? url.slice(0, 120) : null
+        pendingUrl: pendingUrl || null,
+        hasOpenerTabId: Boolean(openerId)
       });
-      deliverInterceptResult(openerId, url, url ? 'ok' : reason || 'empty');
-      chrome.tabs.remove(tab.id).catch(() => {});
-    };
-
-    const u = tab.pendingUrl || tab.url;
-    if (u && u !== 'about:blank' && !u.startsWith('chrome://')) {
-      finish(u, 'immediate-url');
-    } else {
-      devLog('intercept_waiting_for_url', { detailTabId: tab.id, openerTabId: openerId });
-      const listener = (tabId, info, updatedTab) => {
-        if (tabId === tab.id) {
-          const url = info.url || updatedTab.url || updatedTab.pendingUrl;
-          if (url && url !== 'about:blank' && !url.startsWith('chrome://')) {
-            chrome.tabs.onUpdated.removeListener(listener);
-            finish(url, 'tab-updated');
-          }
-        }
-      };
-      chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        devLog('intercept_tab_update_timeout', { detailTabId: tab.id, openerTabId: openerId });
-        finish(null, 'tab-update-timeout');
-      }, 3000);
+      handleInterceptDetailTab(claimedOpenerId, tab, 'intercept_orphan');
+      return;
     }
-  } else if (openerId) {
+  }
+
+  if (openerId) {
     devLog('intercept_tab_created_no_pending', {
       openerTabId: openerId,
       detailTabId: tab.id,

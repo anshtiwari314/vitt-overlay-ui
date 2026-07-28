@@ -426,6 +426,47 @@
     }
   }
 
+  const simulateUserClick = (el) => {
+    if (!el || !el.isConnected) return;
+    try {
+      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    } catch (_) {
+      el.scrollIntoView({ block: 'center' });
+    }
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, rect.left + Math.min(rect.width / 2, Math.max(rect.width - 1, 0)));
+    const y = Math.max(0, rect.top + Math.min(rect.height / 2, Math.max(rect.height - 1, 0)));
+    const base = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      clientX: x,
+      clientY: y,
+      button: 0,
+      buttons: 1,
+      detail: 1
+    };
+    const target = document.elementFromPoint(x, y) || el;
+    const dispatch = (type, Ctor) => {
+      try {
+        target.dispatchEvent(new Ctor(type, base));
+      } catch (_) {
+        target.dispatchEvent(new MouseEvent(type, base));
+      }
+    };
+    dispatch('pointerover', PointerEvent);
+    dispatch('pointerenter', PointerEvent);
+    dispatch('mouseover', MouseEvent);
+    dispatch('mouseenter', MouseEvent);
+    dispatch('pointerdown', PointerEvent);
+    dispatch('mousedown', MouseEvent);
+    dispatch('pointerup', PointerEvent);
+    dispatch('mouseup', MouseEvent);
+    dispatch('click', MouseEvent);
+    if (typeof el.click === 'function') el.click();
+  };
+
   const interceptTabUrl = async (el, timeoutMs = 2000, label = 'click') => {
     return new Promise((resolve) => {
       let settled = false;
@@ -449,8 +490,7 @@
           finish(null, chrome.runtime.lastError?.message || 'intercept_not_ready');
           return;
         }
-        el.scrollIntoView({ block: 'center' });
-        el.click();
+        simulateUserClick(el);
         setTimeout(() => finish(null, 'click_timeout'), timeoutMs + 500);
       });
     });
@@ -487,10 +527,29 @@
   const resolvePackageClickTarget = (cardRoot) => {
     const textContainer = cardRoot.querySelector('.packageTextContainer, [class*="packageTextContainer"]');
     const priceBox = cardRoot.querySelector('.includeWrapper, [class*="includeWrapper"]');
+    const includeItem = cardRoot.querySelector('.includeItemCard, [class*="includeItemCard"]');
+    const priceRight = priceBox?.querySelector('.rightSec, [class*="rightSec"]');
+    const clickTarget = textContainer || priceBox || cardRoot;
+    const clickTargetKind = textContainer
+      ? 'packageTextContainer'
+      : priceBox
+        ? 'includeWrapper'
+        : 'cardRoot';
+    const fallbackClickTarget = includeItem || priceRight || priceBox || null;
+    const fallbackClickTargetKind = includeItem
+      ? 'includeItemCard'
+      : priceRight
+        ? 'priceRightSec'
+        : priceBox
+          ? 'includeWrapper'
+          : null;
     return {
-      clickTarget: textContainer || priceBox || cardRoot,
-      clickTargetKind: textContainer ? 'packageTextContainer' : priceBox ? 'includeWrapper' : 'cardRoot',
-      priceBox
+      clickTarget,
+      clickTargetKind,
+      fallbackClickTarget,
+      fallbackClickTargetKind,
+      priceBox,
+      textContainer
     };
   };
 
@@ -610,7 +669,8 @@
       await closeModals();
 
       const cardRoot = resolveCardWrapper(card);
-      const { clickTarget, clickTargetKind, priceBox } = resolvePackageClickTarget(cardRoot);
+      const { clickTarget, clickTargetKind, fallbackClickTarget, fallbackClickTargetKind, priceBox } =
+        resolvePackageClickTarget(cardRoot);
       if (!clickTarget) {
         if (devLog) devLog.events.push({ type: 'title_match_no_click_target', round: roundNum, name });
         continue;
@@ -647,31 +707,59 @@
           devLog.events.push({
             type: 'package_text_no_url',
             round: roundNum,
-            next: 'wait_for_card_variants'
-          });
-        }
-        await sleep(400);
-        const activeVariants = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 2500));
-        if (devLog) {
-          devLog.events.push({
-            type: 'variant_modal_state',
-            round: roundNum,
-            globalVariantCount: 0,
-            cardVariantCount: activeVariants.length,
-            scopedToCard: true
+            next: fallbackClickTarget ? 'fallback_click_target' : 'wait_for_card_variants'
           });
         }
 
-        if (activeVariants.length) {
-          detail_url = await processVariantOptions(
-            cardRoot,
-            activeVariants,
-            roundNum,
-            detail_url,
-            package_options
+        if (fallbackClickTarget && fallbackClickTarget !== clickTarget) {
+          if (devLog) {
+            devLog.events.push({
+              type: 'fallback_click_start',
+              round: roundNum,
+              clickTarget: fallbackClickTargetKind
+            });
+          }
+          const urlFromFallback = await interceptTabUrl(
+            fallbackClickTarget,
+            3000,
+            `fallback_${fallbackClickTargetKind || 'target'}`
           );
-        } else if (devLog) {
-          devLog.events.push({ type: 'variant_modal_not_found', round: roundNum, name });
+          if (urlFromFallback) {
+            detail_url = urlFromFallback;
+            if (devLog) {
+              devLog.events.push({
+                type: 'fallback_url_captured',
+                round: roundNum,
+                url: urlFromFallback.slice(0, 160)
+              });
+            }
+          }
+        }
+
+        if (!detail_url) {
+          await sleep(400);
+          const activeVariants = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 2500));
+          if (devLog) {
+            devLog.events.push({
+              type: 'variant_modal_state',
+              round: roundNum,
+              globalVariantCount: 0,
+              cardVariantCount: activeVariants.length,
+              scopedToCard: true
+            });
+          }
+
+          if (activeVariants.length) {
+            detail_url = await processVariantOptions(
+              cardRoot,
+              activeVariants,
+              roundNum,
+              detail_url,
+              package_options
+            );
+          } else if (devLog) {
+            devLog.events.push({ type: 'variant_modal_not_found', round: roundNum, name });
+          }
         }
       }
 
