@@ -192,6 +192,21 @@ function handleBridgeMessage(msg) {
 
 const pendingInterceptors = new Map();
 
+function isPackageDetailUrl(url = '') {
+  return /\/holidays\/[^\s"'<>]*package/i.test(String(url || ''));
+}
+
+/** Resolve pending intercept once (new tab or same-tab navigation). */
+function settleIntercept(openerTabId, url, reason) {
+  const interceptor = pendingInterceptors.get(openerTabId);
+  if (!interceptor || interceptor.settled) return false;
+  interceptor.settled = true;
+  pendingInterceptors.delete(openerTabId);
+  clearTimeout(interceptor.timeout);
+  deliverInterceptResult(openerTabId, url, reason);
+  return true;
+}
+
 function devLog(tag, detail = {}) {
   console.log('[vitt-dev]', tag, JSON.stringify({ ts: new Date().toISOString(), ...detail }));
 }
@@ -235,11 +250,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (tabId) {
       devLog('intercept_armed', { openerTabId: tabId, timeoutMs: msg.timeout || 3000 });
       pendingInterceptors.set(tabId, {
+        settled: false,
         timeout: setTimeout(() => {
           if (pendingInterceptors.has(tabId)) {
-            pendingInterceptors.delete(tabId);
+            settleIntercept(tabId, null, 'timeout');
             devLog('intercept_timeout', { openerTabId: tabId });
-            deliverInterceptResult(tabId, null, 'timeout');
           }
         }, msg.timeout || 3000)
       });
@@ -276,6 +291,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   void handleListenerTabUpdated(tabId, changeInfo, tab);
+
+  if (pendingInterceptors.has(tabId)) {
+    const url = changeInfo.url || tab.url || tab.pendingUrl;
+    if (url && isPackageDetailUrl(url)) {
+      devLog('intercept_same_tab_nav', { openerTabId: tabId, url: url.slice(0, 120) });
+      settleIntercept(tabId, url, 'same-tab-nav');
+    }
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -294,6 +317,8 @@ chrome.tabs.onCreated.addListener((tab) => {
       hasOpenerTabId: Boolean(tab.openerTabId)
     });
     const interceptor = pendingInterceptors.get(openerId);
+    if (!interceptor || interceptor.settled) return;
+    interceptor.settled = true;
     pendingInterceptors.delete(openerId);
     clearTimeout(interceptor.timeout);
 

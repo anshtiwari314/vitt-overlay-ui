@@ -267,7 +267,9 @@
       'button[aria-label="Close"]',
       'button[aria-label="close"]',
       '.loginClose',
-      '.crossIcon'
+      '.crossIcon',
+      '.header-cross-btn',
+      '[data-testid="header-cross-btn"]'
     ];
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -454,6 +456,126 @@
     });
   };
 
+  const resolveCardWrapper = (el) =>
+    el.closest('.packageCardWrapper') ||
+    el.closest('[class*="packageCardWrapper"]') ||
+    el.closest('[class*="packageCard"]') ||
+    el;
+
+  const VARIANT_SELECTOR =
+    '.variant-card-container.pointer, .variant-card-container, [class*="variant-card-container"]';
+
+  /** Variants scoped to this card only (MMT: .package-varient-parent → .variant-card-container). */
+  const findVariantsInCard = (cardRoot) => {
+    const variantParent =
+      cardRoot.querySelector(
+        '.package-varient-parent, .package-variant-parent, [class*="package-varient-parent"], [class*="package-variant-parent"]'
+      ) || cardRoot;
+    return [...variantParent.querySelectorAll(VARIANT_SELECTOR)];
+  };
+
+  const waitForVariantsInCard = async (cardRoot, maxWaitMs = 2500) => {
+    const deadline = Date.now() + maxWaitMs;
+    while (Date.now() < deadline) {
+      const variants = findVariantsInCard(cardRoot);
+      if (variants.length) return variants;
+      await sleep(200);
+    }
+    return findVariantsInCard(cardRoot);
+  };
+
+  const resolvePackageClickTarget = (cardRoot) => {
+    const textContainer = cardRoot.querySelector('.packageTextContainer, [class*="packageTextContainer"]');
+    const priceBox = cardRoot.querySelector('.includeWrapper, [class*="includeWrapper"]');
+    return {
+      clickTarget: textContainer || priceBox || cardRoot,
+      clickTargetKind: textContainer ? 'packageTextContainer' : priceBox ? 'includeWrapper' : 'cardRoot',
+      priceBox
+    };
+  };
+
+  const processVariantOptions = async (cardRoot, activeVariants, roundNum, detail_url, package_options) => {
+    let resolvedDetailUrl = detail_url;
+
+    for (const [index, variant] of activeVariants.entries()) {
+      const variantText = (variant.innerText || '').toLowerCase();
+      const isSoldOut = variantText.includes('sold out');
+      const isWithFlight = variantText.includes('with flight');
+      const isWithoutFlight = variantText.includes('without flight');
+
+      if (isWithFlight && opts.extractWithFlight === false) {
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_skipped',
+            round: roundNum,
+            index: index + 1,
+            reason: 'extractWithFlight_disabled',
+            label: (variant.innerText || '').slice(0, 80)
+          });
+        }
+        continue;
+      }
+      if (isWithoutFlight && opts.extractWithoutFlight === false) {
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_skipped',
+            round: roundNum,
+            index: index + 1,
+            reason: 'extractWithoutFlight_disabled',
+            label: (variant.innerText || '').slice(0, 80)
+          });
+        }
+        continue;
+      }
+
+      let vUrl = '';
+      if (!isSoldOut) {
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_click_start',
+            round: roundNum,
+            index: index + 1,
+            label: (variant.innerText || '').slice(0, 80)
+          });
+        }
+        vUrl = await interceptTabUrl(variant, 5000, `variant_${index + 1}`);
+        if (devLog) {
+          devLog.events.push({
+            type: vUrl ? 'variant_url_captured' : 'variant_click_no_url',
+            round: roundNum,
+            index: index + 1,
+            url: vUrl ? vUrl.slice(0, 160) : null
+          });
+        }
+      } else if (devLog) {
+        devLog.events.push({
+          type: 'variant_skipped',
+          round: roundNum,
+          index: index + 1,
+          reason: 'sold_out',
+          label: (variant.innerText || '').slice(0, 80)
+        });
+      }
+
+      const flight_type = isWithFlight
+        ? 'withFlight'
+        : isWithoutFlight
+          ? 'withoutFlight'
+          : 'default';
+
+      package_options.push({
+        option_label: (variant.innerText || '').split('\n').join(' ').slice(0, 100),
+        detail_url: vUrl,
+        status: isSoldOut ? 'sold out' : (vUrl ? 'ok' : 'failed'),
+        flight_type
+      });
+
+      if (vUrl && !resolvedDetailUrl) resolvedDetailUrl = vUrl;
+    }
+
+    return resolvedDetailUrl;
+  };
+
   const processVisibleCards = async (packages, seen, roundNum = 0) => {
     const allCards = document.querySelectorAll(cardSelector);
     const cards = isFirstPackageListing ? [...allCards].slice(0, 1) : allCards;
@@ -485,9 +607,10 @@
 
       await closeModals();
 
-      const priceBox = card.querySelector('.includeWrapper, [class*="includeWrapper"]');
-      if (!priceBox) {
-        if (devLog) devLog.events.push({ type: 'title_match_no_price_box', round: roundNum, name });
+      const cardRoot = resolveCardWrapper(card);
+      const { clickTarget, clickTargetKind, priceBox } = resolvePackageClickTarget(cardRoot);
+      if (!clickTarget) {
+        if (devLog) devLog.events.push({ type: 'title_match_no_click_target', round: roundNum, name });
         continue;
       }
 
@@ -498,93 +621,55 @@
       let detail_url = '';
       const package_options = [];
 
-      // Try capturing tab directly from price box (No variant scenario)
-      if (devLog) devLog.events.push({ type: 'price_box_click_start', round: roundNum, name });
-      const urlFromPrice = await interceptTabUrl(priceBox, 1500, 'price_box');
-      if (urlFromPrice) {
-        detail_url = urlFromPrice;
-        if (devLog) devLog.events.push({ type: 'price_box_url_captured', round: roundNum, url: urlFromPrice.slice(0, 160) });
+      // MMT: click .packageTextContainer — opens new tab directly OR reveals variant picker.
+      if (devLog) {
+        devLog.events.push({
+          type: 'package_text_click_start',
+          round: roundNum,
+          name,
+          clickTarget: clickTargetKind
+        });
+      }
+      const urlFromTextClick = await interceptTabUrl(clickTarget, 3000, 'package_text_container');
+      if (urlFromTextClick) {
+        detail_url = urlFromTextClick;
+        if (devLog) {
+          devLog.events.push({
+            type: 'package_text_url_captured',
+            round: roundNum,
+            url: urlFromTextClick.slice(0, 160)
+          });
+        }
       } else {
-        if (devLog) devLog.events.push({ type: 'price_box_no_url', round: roundNum, next: 'try_variant_modal' });
-        await sleep(600); // Give modal time to appear
-        const variantEls = document.querySelectorAll('.variant-card-container.pointer, .variant-card-container');
-        const activeVariants = variantEls.length > 0 ? variantEls : card.querySelectorAll('.variant-card-container');
+        if (devLog) {
+          devLog.events.push({
+            type: 'package_text_no_url',
+            round: roundNum,
+            next: 'wait_for_card_variants'
+          });
+        }
+        await sleep(400);
+        const activeVariants = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 2500));
         if (devLog) {
           devLog.events.push({
             type: 'variant_modal_state',
             round: roundNum,
-            globalVariantCount: variantEls.length,
-            cardVariantCount: activeVariants.length
+            globalVariantCount: 0,
+            cardVariantCount: activeVariants.length,
+            scopedToCard: true
           });
         }
 
-        for (const [index, variant] of activeVariants.entries()) {
-          const variantText = (variant.innerText || '').toLowerCase();
-          const isSoldOut = variantText.includes('sold out');
-          const isWithFlight = variantText.includes('with flight');
-          const isWithoutFlight = variantText.includes('without flight');
-
-          if (isWithFlight && opts.extractWithFlight === false) {
-            if (devLog) {
-              devLog.events.push({
-                type: 'variant_skipped',
-                round: roundNum,
-                index: index + 1,
-                reason: 'extractWithFlight_disabled',
-                label: (variant.innerText || '').slice(0, 80)
-              });
-            }
-            continue;
-          }
-          if (isWithoutFlight && opts.extractWithoutFlight === false) {
-            if (devLog) {
-              devLog.events.push({
-                type: 'variant_skipped',
-                round: roundNum,
-                index: index + 1,
-                reason: 'extractWithoutFlight_disabled',
-                label: (variant.innerText || '').slice(0, 80)
-              });
-            }
-            continue;
-          }
-
-          let vUrl = '';
-          if (!isSoldOut) {
-            if (devLog) devLog.events.push({ type: 'variant_click_start', round: roundNum, index: index + 1, label: (variant.innerText || '').slice(0, 80) });
-            vUrl = await interceptTabUrl(variant, 2500, `variant_${index + 1}`);
-            if (devLog) {
-              devLog.events.push({
-                type: vUrl ? 'variant_url_captured' : 'variant_click_no_url',
-                round: roundNum,
-                index: index + 1,
-                url: vUrl ? vUrl.slice(0, 160) : null
-              });
-            }
-          } else if (devLog) {
-            devLog.events.push({
-              type: 'variant_skipped',
-              round: roundNum,
-              index: index + 1,
-              reason: 'sold_out',
-              label: (variant.innerText || '').slice(0, 80)
-            });
-          }
-
-          const flight_type = isWithFlight
-            ? 'withFlight'
-            : isWithoutFlight
-              ? 'withoutFlight'
-              : 'default';
-
-          package_options.push({
-            option_label: (variant.innerText || '').split('\n').join(' ').slice(0, 100),
-            detail_url: vUrl,
-            status: isSoldOut ? 'sold out' : (vUrl ? 'ok' : 'failed'),
-            flight_type
-          });
-
-          if (vUrl && !detail_url) detail_url = vUrl;
+        if (activeVariants.length) {
+          detail_url = await processVariantOptions(
+            cardRoot,
+            activeVariants,
+            roundNum,
+            detail_url,
+            package_options
+          );
+        } else if (devLog) {
+          devLog.events.push({ type: 'variant_modal_not_found', round: roundNum, name });
         }
       }
 
@@ -593,7 +678,7 @@
       const key = `${name}|${duration}`;
       if (!seen.has(key)) {
         seen.add(key);
-        const priceSource = priceBox.innerText || card.innerText || '';
+        const priceSource = priceBox?.innerText || cardRoot.innerText || '';
         const priceMatch = priceSource.match(/₹([\d,]+)\s*\/Person/i) || priceSource.match(/₹([\d,]+)/);
         const price = priceMatch ? `₹${priceMatch[1]}` : '';
 
