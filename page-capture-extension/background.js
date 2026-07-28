@@ -186,6 +186,30 @@ function handleBridgeMessage(msg) {
 
   }
 
+  if (msg.type === 'open_popup_settings') {
+    void openChromePopupSettings();
+  }
+
+}
+
+const CHROME_POPUP_SETTINGS_URL = 'chrome://settings/content/popups';
+
+async function openChromePopupSettings() {
+  devLog('open_popup_settings_request', {});
+  try {
+    const tab = await chrome.tabs.create({ url: CHROME_POPUP_SETTINGS_URL, active: true });
+    devLog('open_popup_settings_ok', { tabId: tab?.id ?? null });
+    sendBridgeEvent({ type: 'open_popup_settings_result', ok: true, tabId: tab?.id ?? null });
+  } catch (err) {
+    const error = err?.message || String(err);
+    devLog('open_popup_settings_failed', { error });
+    sendBridgeEvent({
+      type: 'open_popup_settings_result',
+      ok: false,
+      error,
+      needsElectronFallback: true
+    });
+  }
 }
 
 

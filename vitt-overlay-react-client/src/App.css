@@ -50,20 +50,18 @@
   isolation: isolate;
 }
 
-/* Drag handle sits behind interactive content so buttons/tabs receive clicks. */
+/* Backdrop layer sits behind content and never captures pointer events. */
 .card.app4-card::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  -webkit-app-region: drag;
-  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
 }
 
 /* Drag panes: empty space within these regions moves the overlay window. */
 .overlay-drag-pane,
-.content-list,
-.chat-messages,
 .connection-status-bar,
 .controls-section,
 .status-section:not(.no-drag),
@@ -73,11 +71,19 @@
   -webkit-app-region: drag;
 }
 
+/* Scroll lists default to no-drag so empty padding scrolls normally. */
+.content-list,
+.chat-messages {
+  -webkit-app-region: no-drag;
+}
+
 .list-container {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  -webkit-app-region: no-drag;
+  position: relative;
 }
 
 /* Interactive / content blocks opt out of drag. */
@@ -978,6 +984,38 @@
 .setting-label { color: var(--text-muted); }
 .setting-value { color: var(--text-main); font-weight: 500; }
 
+.popup-settings-instructions {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.popup-settings-instructions-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.popup-settings-instructions ol {
+  margin: 0 0 8px 1.1rem;
+  padding: 0;
+}
+
+.popup-settings-instructions li {
+  margin-bottom: 4px;
+}
+
+.popup-settings-instructions code {
+  font-size: 11px;
+  word-break: break-all;
+}
+
 .setting-input {
   background: var(--surface-hover);
   border: 1px solid var(--border-glass);
@@ -1101,13 +1139,26 @@
 
 .tab-unread-dot {
   position: absolute;
-  top: -2px;
-  right: -4px;
-  width: 7px;
-  height: 7px;
+  top: -5px;
+  right: -7px;
+  width: 12px;
+  height: 12px;
   background: #ef4444;
   border-radius: 50%;
-  border: 1.5px solid rgba(20, 20, 23, 0.9);
+  border: 2px solid rgba(20, 20, 23, 0.95);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35), 0 0 8px rgba(239, 68, 68, 0.55);
+  animation: tabUnreadPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tabUnreadPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35), 0 0 8px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.45), 0 0 12px rgba(239, 68, 68, 0.7);
+  }
 }
 
 .toast-container {
@@ -1222,6 +1273,56 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+/* Transparent shield armed by double-click on empty scroll padding. Sits above messages. */
+.list-drag-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+  background: transparent;
+}
+
+.list-container.list-drag-armed .list-drag-shield {
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  background: rgba(116, 255, 160, 0.04);
+}
+
+.list-container.list-drag-armed .list-drag-shield:active {
+  cursor: grabbing;
+}
+
+.list-wrap.list-drag-armed::after,
+.chat-messages-wrap.list-drag-armed::after {
+  content: 'Drag to move — Esc to cancel';
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 16;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(116, 255, 160, 0.18);
+  border: 1px solid rgba(116, 255, 160, 0.45);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+  animation: listDragArmedIn 0.15s ease-out;
+}
+
+@keyframes listDragArmedIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .new-messages-indicator {

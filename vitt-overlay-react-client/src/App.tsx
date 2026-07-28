@@ -45,6 +45,7 @@ import {
 } from './functions/scrapeServer'
 import { minimizeOverlayWindow, quitOverlayWindow } from './functions/overlayWindow'
 import { useOverlayInteraction } from './hooks/useOverlayInteraction'
+import { useEmptyAreaDoubleClickDrag } from './hooks/useEmptyAreaDoubleClickDrag'
 import { useExtensionBridgeStatus } from './hooks/useExtensionBridgeStatus'
 import GMeetIcon from './assets/g-meet.png'
 import ZoomIcon from './assets/zoom.png'
@@ -385,10 +386,13 @@ function ConnectionStatusIcon({
 
 function TranscriptionList() {
   const transcriptions = useSelector((state: { transcriptionReducer: { transcriptions: { speaker?: string; transcription: string }[] } }) => state.transcriptionReducer.transcriptions)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const { ref, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(transcriptions, 'top')
+  useEmptyAreaDoubleClickDrag(wrapRef)
 
   return (
-    <div className="list-wrap">
+    <div className="list-wrap" ref={wrapRef}>
+      <div className="list-drag-shield" aria-hidden="true" />
       <div className="content-list" ref={ref}>
         {transcriptions.map((entry, index) => (
           <TranscriptionItem e={entry} key={index} highlighted={isHighlighted(index)} />
@@ -614,12 +618,48 @@ function SettingsTab({
   onLogout: () => void
 }) {
   const { wsUrlDraft, updateWsUrlDraft, commitWsUrlDraft } = useServerUrl()
+  const extensionConnected = useExtensionBridgeStatus()
   const [language, setLanguage] = useState('english')
   const [serverUrlSaveMsg, setServerUrlSaveMsg] = useState<string | null>(null)
+  const [popupSettingsMsg, setPopupSettingsMsg] = useState<string | null>(null)
+  const [openingPopupSettings, setOpeningPopupSettings] = useState(false)
 
   const displayUserId = currentUser?.userid ?? currentUser?.id ?? 'N/A'
   const displayName = currentUser?.name ?? 'N/A'
   const displayRole = currentUser?.role ?? 'N/A'
+
+  const openChromePopupSettings = async () => {
+    const overlay = (window as Window & {
+      overlay?: {
+        sendExtensionCommand?: (payload: object) => Promise<{ ok?: boolean; error?: string; via?: string }>
+      }
+    }).overlay
+
+    if (!overlay?.sendExtensionCommand) {
+      setPopupSettingsMsg('Only available in the Electron app.')
+      return
+    }
+    if (!extensionConnected) {
+      setPopupSettingsMsg('Extension not connected. Open Chrome with Vitt Page Capture loaded.')
+      return
+    }
+
+    setOpeningPopupSettings(true)
+    setPopupSettingsMsg(null)
+    try {
+      const result = await overlay.sendExtensionCommand({ type: 'open_popup_settings' })
+      if (result?.ok) {
+        setPopupSettingsMsg('Opening Chrome popup settings…')
+      } else {
+        setPopupSettingsMsg(result?.error ?? 'Could not open Chrome popup settings.')
+      }
+    } catch (err) {
+      setPopupSettingsMsg(err instanceof Error ? err.message : 'Could not open Chrome popup settings.')
+    } finally {
+      setOpeningPopupSettings(false)
+      window.setTimeout(() => setPopupSettingsMsg(null), 4000)
+    }
+  }
 
   return (
     <div className="content-list settings-tab">
@@ -706,6 +746,49 @@ function SettingsTab({
       </div>
 
       <div className="setting-section">
+        <div className="setting-header">Browser (MMT scraping)</div>
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+          <span className="setting-label" style={{ lineHeight: 1.45, textTransform: 'none', fontWeight: 500 }}>
+            MakeMyTrip package scraping needs popups enabled in Chrome. 
+          </span>
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ flex: 'none', width: '100%', height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onClick={() => void openChromePopupSettings()}
+            disabled={openingPopupSettings || !extensionConnected}
+          >
+            {openingPopupSettings ? <Loader2 size={16} className="chat-loading-spinner" /> : <Chrome size={16} />}
+            {openingPopupSettings ? 'Opening…' : 'Open Chrome popup settings'}
+          </button>
+          {!extensionConnected ? (
+            <span className="setting-label" style={{ fontSize: 11, lineHeight: 1.45, textTransform: 'none', fontWeight: 500, color: 'var(--danger, #e57373)' }}>
+              Extension not connected — load Vitt Page Capture in Chrome first.
+            </span>
+          ) : null}
+          {popupSettingsMsg ? (
+            <span className="setting-value" style={{ fontSize: 12, color: 'var(--accent)' }}>{popupSettingsMsg}</span>
+          ) : null}
+          <div className="popup-settings-instructions">
+            <div className="popup-settings-instructions-title">Whitelist these sites in Chrome popups:</div>
+            <ol>
+              <li>
+                Click <strong>Allow</strong> next to{' '}
+                <code>https://holidayz.makemytrip.com/</code>
+              </li>
+              <li>
+                Click <strong>Allow</strong> next to{' '}
+                <code>https://www.makemytrip.com/</code>
+              </li>
+            </ol>
+            <span className="setting-label" style={{ fontSize: 11, lineHeight: 1.45, textTransform: 'none', fontWeight: 500 }}>
+              In Chrome: Settings → Privacy and security → Site settings → Pop-ups and redirects → Add both URLs under &quot;Allowed to send pop-ups and use redirects&quot;.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="setting-section">
         <div className="setting-header">About</div>
         <div className="setting-row">
           <span className="setting-label">App Version</span>
@@ -779,7 +862,9 @@ function MergedAiAssistTab({
     return items
   }, [messages, prompts])
 
+  const wrapRef = useRef<HTMLDivElement>(null)
   const { ref: scrollRef, unseenCount, scrollToFollow, isHighlighted } = useScrollLock(feedItems, 'bottom')
+  useEmptyAreaDoubleClickDrag(wrapRef)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -854,7 +939,8 @@ function MergedAiAssistTab({
 
   return (
     <div className="chat-tab">
-      <div className="chat-messages-wrap" style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="chat-messages-wrap" ref={wrapRef} style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="list-drag-shield" aria-hidden="true" />
         <div className="chat-messages" ref={scrollRef}>
           {feedItems.length === 0 ? (
             <div className="prompt-empty">
@@ -1027,7 +1113,6 @@ export default function App() {
   )
   const prevAssistantMsgCount = useRef(0)
   const prevPromptsCount = useRef(0)
-  const prevDataLen = useRef(DEFAULT_DATA_FIELDS.length)
 
   const selectedTabRef = useRef(selectedTab)
   const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set())
@@ -1163,15 +1248,6 @@ export default function App() {
     prevAssistantMsgCount.current = assistantMsgCount
     prevPromptsCount.current = promptsCount
   }, [assistantMsgCount, promptsCount])
-
-  useEffect(() => {
-    if (dataInfoItems.length > prevDataLen.current) {
-      if (selectedTabRef.current !== 'data_info') {
-        setUnreadTabs((prev) => { const s = new Set(prev); s.add('data_info'); return s })
-      }
-    }
-    prevDataLen.current = dataInfoItems.length
-  }, [dataInfoItems.length])
 
   useEffect(() => {
     const onResponse = () => {
@@ -1760,7 +1836,6 @@ export default function App() {
     selectedTabRef.current = 'transcript'
     prevAssistantMsgCount.current = 0
     prevPromptsCount.current = 0
-    prevDataLen.current = 0
 
     setActiveSessionId(nextFallbackSessionId)
     setSelectedTab('transcript')
@@ -1840,7 +1915,6 @@ export default function App() {
 
     focusedFieldIdRef.current = null
     lastSentDataRef.current = ''
-    prevDataLen.current = DEFAULT_DATA_FIELDS.length
     pendingInitFieldsRef.current = null
 
     setDataInfoItems(DEFAULT_DATA_FIELDS.map((field) => ({ ...field })))
@@ -2102,7 +2176,7 @@ export default function App() {
           <TabButton active={selectedTab === 'transcript'} onClick={() => handleTabSelect('transcript')} icon={<FileText size={18} />} label="Transcript" />
           {/* <TabButton active={selectedTab === 'uploads'} onClick={() => handleTabSelect('uploads')} icon={<Cloud size={18} />} label="Uploads" /> */}
           <TabButton active={selectedTab === 'ai_assist'} onClick={() => handleTabSelect('ai_assist')} icon={<Sparkles size={18} />} label="AI Assist" hasUnread={unreadTabs.has('ai_assist')} />
-          <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" hasUnread={unreadTabs.has('data_info')} />
+          <TabButton active={selectedTab === 'data_info'} onClick={() => handleTabSelect('data_info')} icon={<Database size={18} />} label="Data" />
           {/* <TabButton active={selectedTab === 'scrape'} onClick={() => handleTabSelect('scrape')} icon={<Globe size={18} />} label="Scrape" /> */}
         </div>
 

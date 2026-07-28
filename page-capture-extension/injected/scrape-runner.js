@@ -463,7 +463,6 @@
     dispatch('mousedown', MouseEvent);
     dispatch('pointerup', PointerEvent);
     dispatch('mouseup', MouseEvent);
-    dispatch('click', MouseEvent);
     if (typeof el.click === 'function') el.click();
   };
 
@@ -514,7 +513,7 @@
     return [...variantParent.querySelectorAll(VARIANT_SELECTOR)];
   };
 
-  const waitForVariantsInCard = async (cardRoot, maxWaitMs = 2500) => {
+  const waitForVariantsInCard = async (cardRoot, maxWaitMs = 1500) => {
     const deadline = Date.now() + maxWaitMs;
     while (Date.now() < deadline) {
       const variants = findVariantsInCard(cardRoot);
@@ -553,14 +552,70 @@
     };
   };
 
-  const processVariantOptions = async (cardRoot, activeVariants, roundNum, detail_url, package_options) => {
+  const findVariantByFlightType = (variants, isWithFlight, isWithoutFlight) =>
+    variants.find((v) => {
+      const t = (v.innerText || '').toLowerCase();
+      if (isWithFlight) return t.includes('with flight');
+      if (isWithoutFlight) return t.includes('without flight');
+      return false;
+    });
+
+  const processVariantOptions = async (
+    cardRoot,
+    activeVariants,
+    roundNum,
+    detail_url,
+    package_options,
+    listingClickTarget
+  ) => {
     let resolvedDetailUrl = detail_url;
 
-    for (const [index, variant] of activeVariants.entries()) {
-      const variantText = (variant.innerText || '').toLowerCase();
+    for (let index = 0; index < activeVariants.length; index++) {
+      const spec = activeVariants[index];
+      let variantText = (spec.innerText || '').toLowerCase();
+      let isWithFlight = variantText.includes('with flight');
+      let isWithoutFlight = variantText.includes('without flight');
+      let variant = spec;
+
+      if (index > 0 && listingClickTarget) {
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_picker_reopen',
+            round: roundNum,
+            index: index + 1,
+            flight_type: isWithoutFlight ? 'withoutFlight' : isWithFlight ? 'withFlight' : 'default'
+          });
+        }
+        simulateUserClick(listingClickTarget);
+        await sleep(200);
+        const refreshed = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 1500));
+        variant =
+          findVariantByFlightType(refreshed, isWithFlight, isWithoutFlight) ||
+          refreshed[index] ||
+          null;
+        if (!variant) {
+          if (devLog) {
+            devLog.events.push({
+              type: 'variant_reopen_not_found',
+              round: roundNum,
+              index: index + 1,
+              refreshedCount: refreshed.length
+            });
+          }
+          package_options.push({
+            option_label: (spec.innerText || '').split('\n').join(' ').slice(0, 100),
+            detail_url: '',
+            status: 'failed',
+            flight_type: isWithFlight ? 'withFlight' : isWithoutFlight ? 'withoutFlight' : 'default'
+          });
+          continue;
+        }
+        variantText = (variant.innerText || '').toLowerCase();
+        isWithFlight = variantText.includes('with flight');
+        isWithoutFlight = variantText.includes('without flight');
+      }
+
       const isSoldOut = variantText.includes('sold out');
-      const isWithFlight = variantText.includes('with flight');
-      const isWithoutFlight = variantText.includes('without flight');
 
       if (isWithFlight && opts.extractWithFlight === false) {
         if (devLog) {
@@ -597,7 +652,7 @@
             label: (variant.innerText || '').slice(0, 80)
           });
         }
-        vUrl = await interceptTabUrl(variant, 5000, `variant_${index + 1}`);
+        vUrl = await interceptTabUrl(variant, 3000, `variant_${index + 1}`);
         if (devLog) {
           devLog.events.push({
             type: vUrl ? 'variant_url_captured' : 'variant_click_no_url',
@@ -662,8 +717,6 @@
           continue;
         }
         if (devLog) devLog.events.push({ type: 'title_matched', round: roundNum, name, searchPackageName: opts.searchPackageName });
-        if (devLog) devLog.events.push({ type: 'post_match_hydration_wait', round: roundNum, waitMs: 3000 });
-        await sleep(3000);
       }
 
       await closeModals();
@@ -677,7 +730,6 @@
       }
 
       card.scrollIntoView({ block: 'center' });
-      await sleep(300);
       card.dataset.vittResolved = 'true';
 
       let detail_url = '';
@@ -692,7 +744,7 @@
           clickTarget: clickTargetKind
         });
       }
-      const urlFromTextClick = await interceptTabUrl(clickTarget, 3000, 'package_text_container');
+      const urlFromTextClick = await interceptTabUrl(clickTarget, 2000, 'package_text_container');
       if (urlFromTextClick) {
         detail_url = urlFromTextClick;
         if (devLog) {
@@ -707,21 +759,42 @@
           devLog.events.push({
             type: 'package_text_no_url',
             round: roundNum,
-            next: fallbackClickTarget ? 'fallback_click_target' : 'wait_for_card_variants'
+            next: 'wait_for_card_variants'
           });
         }
 
-        if (fallbackClickTarget && fallbackClickTarget !== clickTarget) {
+        const activeVariants = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 1500));
+        if (devLog) {
+          devLog.events.push({
+            type: 'variant_modal_state',
+            round: roundNum,
+            globalVariantCount: 0,
+            cardVariantCount: activeVariants.length,
+            scopedToCard: true
+          });
+        }
+
+        if (activeVariants.length) {
+          detail_url = await processVariantOptions(
+            cardRoot,
+            activeVariants,
+            roundNum,
+            detail_url,
+            package_options,
+            clickTarget
+          );
+        } else if (fallbackClickTarget && fallbackClickTarget !== clickTarget) {
           if (devLog) {
             devLog.events.push({
               type: 'fallback_click_start',
               round: roundNum,
-              clickTarget: fallbackClickTargetKind
+              clickTarget: fallbackClickTargetKind,
+              reason: 'no_variants_found'
             });
           }
           const urlFromFallback = await interceptTabUrl(
             fallbackClickTarget,
-            3000,
+            2000,
             `fallback_${fallbackClickTargetKind || 'target'}`
           );
           if (urlFromFallback) {
@@ -733,33 +806,11 @@
                 url: urlFromFallback.slice(0, 160)
               });
             }
-          }
-        }
-
-        if (!detail_url) {
-          await sleep(400);
-          const activeVariants = await waitForVariantsInCard(cardRoot, Math.min(waitMs, 2500));
-          if (devLog) {
-            devLog.events.push({
-              type: 'variant_modal_state',
-              round: roundNum,
-              globalVariantCount: 0,
-              cardVariantCount: activeVariants.length,
-              scopedToCard: true
-            });
-          }
-
-          if (activeVariants.length) {
-            detail_url = await processVariantOptions(
-              cardRoot,
-              activeVariants,
-              roundNum,
-              detail_url,
-              package_options
-            );
           } else if (devLog) {
             devLog.events.push({ type: 'variant_modal_not_found', round: roundNum, name });
           }
+        } else if (devLog) {
+          devLog.events.push({ type: 'variant_modal_not_found', round: roundNum, name });
         }
       }
 
