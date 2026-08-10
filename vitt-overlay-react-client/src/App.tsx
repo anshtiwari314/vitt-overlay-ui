@@ -1104,6 +1104,17 @@ export default function App() {
   const wsReconnectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
+    dispatch(clearTranscriptions())
+    dispatch(clearPrompts())
+    dispatch(clearChat())
+    setDataInfoItems([])
+    setUnreadTabs(new Set())
+    prevAssistantMsgCount.current = 0
+    prevPromptsCount.current = 0
+    prevDataLen.current = 0
+  }, [dispatch])
+
+  useEffect(() => {
     const ref = wsRef as React.MutableRefObject<WebSocket | null>
     const reconnectInterval = 1000
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
